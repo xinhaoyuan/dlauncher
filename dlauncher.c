@@ -136,13 +136,17 @@ calcoffsets(void) {
 	for(i = 0, next_pindex = cur_pindex;
         next_pindex < plugin_entry[cur_plugin]->item_count;
         ++ next_pindex) {
-        int tw = textw(dc, plugin_entry[cur_plugin]->item_entry[next_pindex].name);
+        const char *_text;
+        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], next_pindex, &_text);
+        int tw = textw(dc, _text);
 		if((i += (lines > 0) ? bh : MIN(tw, n)) > n)
 			break;
     }
 
 	for(i = 0, prev_pindex = cur_pindex - 1; prev_pindex > 0; -- prev_pindex) {
-        int tw = textw(dc, plugin_entry[cur_plugin]->item_entry[prev_pindex].name);
+        const char *_text;
+        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);
+        int tw = textw(dc, _text);
 		if((i += (lines > 0) ? bh : MIN(tw, n)) > n) {
             ++ prev_pindex;
 			break;
@@ -192,7 +196,9 @@ drawmenu(void) {
 		dc->w = mw - dc->x;
 		for(index = cur_pindex; index != next_pindex; ++ index) {
 			dc->y += dc->h;
-			drawtext(dc, plugin_entry[cur_plugin]->item_entry[index].name,
+            const char *_text;
+            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);            
+			drawtext(dc, _text,
                      (index == sel_index) ? selcol : normcol);
 		}
 	}
@@ -203,10 +209,13 @@ drawmenu(void) {
 		if(cur_pindex > 0)
 			drawtext(dc, "<", normcol);
 		for(index = cur_pindex; index != next_pindex; ++ index) {
-            int tw = textw(dc, plugin_entry[cur_plugin]->item_entry[index].name);
+            const char *_text;
+            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);            
+
+            int tw = textw(dc, _text);
 			dc->x += dc->w;
 			dc->w = MIN(tw, mw - dc->x - textw(dc, ">"));
-			drawtext(dc, plugin_entry[cur_plugin]->item_entry[index].name,
+			drawtext(dc, _text,
                      (index == sel_index) ? selcol : normcol);
 		}
 		dc->w = textw(dc, ">");
@@ -375,7 +384,7 @@ keypress(XKeyEvent *ev) {
             sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count &&
             !(ev->state & ShiftMask)) {
             const char *output;
-            plugin_entry[cur_plugin]->describe(plugin_entry[cur_plugin], sel_index, &output);
+            plugin_entry[cur_plugin]->get_cmd(plugin_entry[cur_plugin], sel_index, &output);
             puts(output);
         } else puts(text);
 		exit(EXIT_SUCCESS);
@@ -403,7 +412,11 @@ keypress(XKeyEvent *ev) {
            sel_index < 0 ||
            sel_index >= plugin_entry[cur_plugin]->item_count)
 			return;
-		strncpy(text, plugin_entry[cur_plugin]->item_entry[sel_index].name, sizeof text);
+        
+        const char *_text;
+        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);            
+
+		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
 		update();
 		break;

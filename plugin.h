@@ -15,10 +15,10 @@ extern "C" {
 
         unsigned int item_count;
         unsigned int item_default_sel;
-        dl_item_s   *item_entry;
 
-        int (*update)  (dl_plugin_t self, const char *input);
-        int (*describe)(dl_plugin_t self, unsigned int index, const char **output_ptr);
+        int (*update)   (dl_plugin_t self, const char *input);
+        int (*get_text) (dl_plugin_t self, unsigned int index, const char **output_ptr);
+        int (*get_cmd)  (dl_plugin_t self, unsigned int index, const char **output_ptr);
     } dl_plugin_s;
 
     void register_plugin(dl_plugin_t plugin);
