@@ -12,8 +12,7 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _get_cmd(dl_plugin_t self, unsigned int index, const char **output_ptr) {
-    *output_ptr = "hello cmd";
+static int _open(dl_plugin_t self, unsigned int index) {
     return 0;
 }
 
@@ -26,7 +25,7 @@ static __attribute__((constructor)) void _dummy_init(void) {
     _self.item_default_sel = 0;
     _self.update     = &_update;
     _self.get_text   = &_get_text;
-    _self.get_cmd    = &_get_cmd;
+    _self.open       = &_open;
     
     register_plugin(&_self);
 }

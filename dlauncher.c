@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <signal.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <X11/Xlib.h>
@@ -33,14 +34,21 @@ static void update(void);
 static size_t nextrune(int inc);
 static void paste(void);
 static void run(void);
-static void setup(void);
 static void usage(void);
 static void init_history(void);
 static void add_history(const char *plugin_name, const char *text);
 static void add_history_line(const char *line);
 static void jump_to_history(const char *line);
+static void setup(void);
+static void calc_geo(void);
+static void show(void);
+static void hide(void);
+static void signal_show(int);
+
+static int to_show = 0;
 
 #define HISTORY_SIZE 8192
+#define HISTORY_CMP_MAX 16
 static FILE       *history_file;
 static char       *history_file_path;
 static const char *history[HISTORY_SIZE * 2];
@@ -50,7 +58,7 @@ static int         history_index;
 static const char *prompt_empty = "DLauncher-"VERSION;
 static char prompt_buf[BUFSIZ] = "";
 static char text[BUFSIZ] = "";
-static int bh, mw, mh;
+static int bh, mx, my, mw, mh;
 static int inputw, promptw;
 static size_t cursor = 0;
 static const char *font = NULL;
@@ -125,12 +133,13 @@ main(int argc, char *argv[]) {
 
     init_history();
     
-    grabkeyboard();
-    
     cur_plugin = -1;
     prompt = prompt_empty;
     
-	setup();
+    setup();
+
+    signal(SIGUSR1, signal_show);
+    
 	run();
 
 	return 1; /* unreachable */
@@ -382,7 +391,9 @@ keypress(XKeyEvent *ev) {
         }
 		break;
 	case XK_Escape:
-		exit(EXIT_FAILURE);
+		hide();
+        return;
+        
 	case XK_Home:
 		if(sel_index < 0 || sel_index == 0) {
 			cursor = 0;
@@ -432,10 +443,11 @@ keypress(XKeyEvent *ev) {
             const char *_text;
             plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
             add_history(plugin_entry[cur_plugin]->name, _text);
-            plugin_entry[cur_plugin]->get_cmd(plugin_entry[cur_plugin], sel_index, &_text);
-            puts(_text);
-        } else puts(text);
-		exit(EXIT_SUCCESS);
+            plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], sel_index);
+        }
+        hide();
+        return;
+        
 	case XK_Right:
 		if(text[cursor] != '\0') {
 			cursor = nextrune(+1);
@@ -586,6 +598,15 @@ add_history(const char *name, const char *text) {
 
 void
 add_history_line(const char *line) {
+    int i;
+    for (i = history_count - 1;
+         i >= 0 && i >= history_count - HISTORY_CMP_MAX; -- i) {
+        if (strcmp(line, history[i]) == 0) {
+            free((void *)line);
+            return;
+        }
+    }
+    
     if (history_count >= HISTORY_SIZE * 2) {
         int i;
         for (i = 0; i < HISTORY_SIZE; ++ i) {
@@ -626,7 +647,6 @@ void jump_to_history(const char *line) {
         /* for completely matching */
         if (strncmp(plugin_entry[p_index]->name, line, len) == 0 &&
             line[len] == ':') {
-            fprintf(stderr, "find plugin index %d\n", p_index);
             cur_plugin = p_index;
             strncpy(text, line + len + 1, sizeof text);
             cursor = strlen(text);
@@ -639,54 +659,58 @@ void jump_to_history(const char *line) {
 void
 run(void) {
 	XEvent ev;
+    int x11_fd = ConnectionNumber(dc->dpy);
+    fd_set in_fds;
+    struct timeval tv;
+    
+	while(1) {
+        FD_ZERO(&in_fds);
+        FD_SET(x11_fd, &in_fds);
 
-	while(!XNextEvent(dc->dpy, &ev)) {
-		if(XFilterEvent(&ev, win))
-			continue;
-		switch(ev.type) {
-		case Expose:
-			if(ev.xexpose.count == 0)
-				mapdc(dc, win, mw, mh);
-			break;
-		case KeyPress:
-			keypress(&ev.xkey);
-			break;
-		case SelectionNotify:
-			if(ev.xselection.property == utf8)
-				paste();
-			break;
-		case VisibilityNotify:
-			if(ev.xvisibility.state != VisibilityUnobscured)
-				XRaiseWindow(dc->dpy, win);
-			break;
-		}
-	}
+        tv.tv_usec = 0;
+        tv.tv_sec = 1;
+        
+        if (to_show) {
+            to_show = 0;
+            show();
+        }
+
+        while (XPending(dc->dpy)) {
+            XNextEvent(dc->dpy, &ev);
+            if(XFilterEvent(&ev, win))
+                continue;
+            switch(ev.type) {
+            case Expose:
+                if(ev.xexpose.count == 0)
+                    mapdc(dc, win, mw, mh);
+                break;
+            case KeyPress:
+                keypress(&ev.xkey);
+                break;
+            case SelectionNotify:
+                if(ev.xselection.property == utf8)
+                    paste();
+                break;
+            case VisibilityNotify:
+                if(ev.xvisibility.state != VisibilityUnobscured)
+                    XRaiseWindow(dc->dpy, win);
+                break;
+            }
+        }
+        
+        select(x11_fd+1, &in_fds, 0, 0, &tv);
+    }
 }
 
 void
-setup(void) {
-	int x, y, screen = DefaultScreen(dc->dpy);
-	Window root = RootWindow(dc->dpy, screen);
-	XSetWindowAttributes swa;
-	XIM xim;
+calc_geo(void) {
+    int x, y, screen = DefaultScreen(dc->dpy);
+    Window root = RootWindow(dc->dpy, screen);
+    
 #ifdef XINERAMA
 	int n;
 	XineramaScreenInfo *info;
-#endif
 
-	normcol[ColBG] = getcolor(dc, normbgcolor);
-	normcol[ColFG] = getcolor(dc, normfgcolor);
-	selcol[ColBG]  = getcolor(dc, selbgcolor);
-	selcol[ColFG]  = getcolor(dc, selfgcolor);
-
-	clip = XInternAtom(dc->dpy, "CLIPBOARD",   False);
-	utf8 = XInternAtom(dc->dpy, "UTF8_STRING", False);
-
-	/* calculate menu geometry */
-	bh = dc->font.height + 2;
-	lines = MAX(lines, 0);
-	mh = (lines + 1) * bh;
-#ifdef XINERAMA
 	if((info = XineramaQueryScreens(dc->dpy, &n))) {
 		int a, j, di, i = 0, area = 0;
 		unsigned int du;
@@ -714,24 +738,47 @@ setup(void) {
 				if(INTERSECT(x, y, 1, 1, info[i]))
 					break;
 
-		x = info[i].x_org;
-		y = info[i].y_org + (topbar ? 0 : info[i].height - mh);
+		mx = info[i].x_org;
+		my = info[i].y_org + (topbar ? 0 : info[i].height - mh);
 		mw = info[i].width;
 		XFree(info);
 	}
 	else
 #endif
 	{
-		x = 0;
-		y = topbar ? 0 : DisplayHeight(dc->dpy, screen) - mh;
+		mx = 0;
+		my = topbar ? 0 : DisplayHeight(dc->dpy, screen) - mh;
 		mw = DisplayWidth(dc->dpy, screen);
 	}
+}
 
+void
+setup(void) {
+	int screen = DefaultScreen(dc->dpy);
+	Window root = RootWindow(dc->dpy, screen);
+	XSetWindowAttributes swa;
+	XIM xim;
+
+	normcol[ColBG] = getcolor(dc, normbgcolor);
+	normcol[ColFG] = getcolor(dc, normfgcolor);
+	selcol[ColBG]  = getcolor(dc, selbgcolor);
+	selcol[ColFG]  = getcolor(dc, selfgcolor);
+
+	clip = XInternAtom(dc->dpy, "CLIPBOARD",   False);
+	utf8 = XInternAtom(dc->dpy, "UTF8_STRING", False);
+
+	/* calculate menu geometry */
+	bh = dc->font.height + 2;
+	lines = MAX(lines, 0);
+	mh = (lines + 1) * bh;
+    
+    calc_geo();
+    
 	/* create menu window */
 	swa.override_redirect = True;
 	swa.background_pixel = normcol[ColBG];
 	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask;
-	win = XCreateWindow(dc->dpy, root, x, y, mw, mh, 0,
+	win = XCreateWindow(dc->dpy, root, mx, my, mw, mh, 0,
 	                    DefaultDepth(dc->dpy, screen), CopyFromParent,
 	                    DefaultVisual(dc->dpy, screen),
 	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &swa);
@@ -740,10 +787,30 @@ setup(void) {
 	xim = XOpenIM(dc->dpy, NULL, NULL, NULL);
 	xic = XCreateIC(xim, XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
 	                XNClientWindow, win, XNFocusWindow, win, NULL);
+}
 
-	XMapRaised(dc->dpy, win);
+void
+signal_show(int signo) {
+    to_show = 1;
+}
+
+void
+show(void) {
+    grabkeyboard();
+
+    calc_geo();
+
+    XMoveWindow(dc->dpy, win, mx, my);
+    XResizeWindow(dc->dpy, win, mw, mh);
+    XMapRaised(dc->dpy, win);
 	resizedc(dc, mw, mh);
 	drawmenu();
+}
+
+void
+hide(void) {
+    XUnmapWindow(dc->dpy, win);
+    XUngrabKeyboard(dc->dpy, CurrentTime);
 }
 
 void
