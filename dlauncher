@@ -25,7 +25,7 @@ elif [ "$OP" = "start" ]; then
             wait $_PID 2>/dev/null
         ) &
     fi
-elif [ "$OP" = "open-launcher" ]; then
+elif [ "$OP" = "open" ]; then
     while [ ! -e $LOCK_DIR/pid ]; do
         $0 start
         sleep .5

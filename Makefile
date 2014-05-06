@@ -3,8 +3,8 @@
 
 include config.mk
 
-SRC = dlauncher.c draw.c dummy_plugin.c
-OBJ = ${SRC:.c=.o}
+SRC = dlauncher.c draw.c dummy_plugin.c exec.cpp dirlist.cpp
+OBJ = dlauncher.o draw.o dummy_plugin.o exec.o dirlist.o
 
 all: options dlauncher.bin
 
@@ -18,11 +18,15 @@ options:
 	@echo CC -c $<
 	@${CC} -c $< ${CFLAGS}
 
+.cpp.o:
+	@echo CXX -c $<
+	@${CXX} -c $< ${CXXFLAGS}
+
 ${OBJ}: config.mk draw.h
 
-dlauncher.bin: dlauncher.o draw.o dummy_plugin.o
-	@echo CC -o $@
-	@${CC} -o $@ dlauncher.o draw.o dummy_plugin.o ${LDFLAGS}
+dlauncher.bin: dlauncher.o draw.o dummy_plugin.o exec.o dirlist.o
+	@echo CXX -o $@
+	@${CXX} -o $@ $^ ${LDFLAGS}
 
 
 clean:

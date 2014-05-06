@@ -45,7 +45,7 @@ static void show(void);
 static void hide(void);
 static void signal_show(int);
 
-static int to_show = 0;
+static int volatile to_show = 0;
 
 #define HISTORY_SIZE 8192
 #define HISTORY_CMP_MAX 16
@@ -138,6 +138,7 @@ main(int argc, char *argv[]) {
     
     setup();
 
+    signal(SIGCHLD, SIG_IGN);
     signal(SIGUSR1, signal_show);
     
 	run();
