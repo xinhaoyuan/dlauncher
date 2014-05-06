@@ -1,4 +1,7 @@
 /* See LICENSE file for copyright and license details. */
+#define _XOPEN_SOURCE 700
+#define _GNU_SOURCE
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +35,17 @@ static void paste(void);
 static void run(void);
 static void setup(void);
 static void usage(void);
+static void init_history(void);
+static void add_history(const char *plugin_name, const char *text);
+static void add_history_line(const char *line);
+static void jump_to_history(const char *line);
+
+#define HISTORY_SIZE 8192
+static FILE       *history_file;
+static char       *history_file_path;
+static const char *history[HISTORY_SIZE * 2];
+static int         history_count;
+static int         history_index;
 
 static const char *prompt_empty = "DLauncher-"VERSION;
 static char prompt_buf[BUFSIZ] = "";
@@ -64,6 +78,8 @@ static int cur_pindex, prev_pindex, next_pindex, sel_index;
 
 void register_plugin(dl_plugin_t plugin) {
     if (plugin_count >= NPLUGIN) return;
+    /* no comma in name of a plugin is allowed */
+    if (strchr(plugin->name,',')) return;
     plugin_entry[plugin_count ++] = plugin;
 }
 
@@ -107,6 +123,8 @@ main(int argc, char *argv[]) {
 	dc = initdc();
 	initfont(dc, font);
 
+    init_history();
+    
     grabkeyboard();
     
     cur_plugin = -1;
@@ -305,6 +323,34 @@ keypress(XKeyEvent *ev) {
 		case XK_j: ksym = XK_Next;  break;
 		case XK_k: ksym = XK_Prior; break;
 		case XK_l: ksym = XK_Down;  break;
+        case XK_Tab:
+            if (cur_plugin < 0) break;
+            int p = (cur_plugin + 1) % plugin_count;
+            while (p != cur_plugin && plugin_entry[p]->item_count == 0)
+                p = (cur_plugin + 1) % plugin_count;
+            cur_plugin = p;
+            update();
+            drawmenu();
+            return;
+
+        case XK_Up:
+            if (history_index == -1) history_index = history_count - 1;
+            if (history_index == -1) break;
+            if (history_index > 0) -- history_index;
+            jump_to_history(history[history_index]);
+            update();
+            drawmenu();
+            return;
+            
+        case XK_Down:
+            if (history_index == -1) history_index = history_count - 1;
+            if (history_index == -1) break;
+            if (history_index < history_count - 1) ++ history_index;
+            jump_to_history(history[history_index]);
+            update();
+            drawmenu();
+            return;
+
 		default:
 			return;
 		}
@@ -383,9 +429,11 @@ keypress(XKeyEvent *ev) {
 		if (cur_plugin >= 0 &&
             sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count &&
             !(ev->state & ShiftMask)) {
-            const char *output;
-            plugin_entry[cur_plugin]->get_cmd(plugin_entry[cur_plugin], sel_index, &output);
-            puts(output);
+            const char *_text;
+            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+            add_history(plugin_entry[cur_plugin]->name, _text);
+            plugin_entry[cur_plugin]->get_cmd(plugin_entry[cur_plugin], sel_index, &_text);
+            puts(_text);
         } else puts(text);
 		exit(EXIT_SUCCESS);
 	case XK_Right:
@@ -455,6 +503,7 @@ update(void) {
 
       skip:
         /* current plugin no longer available */
+        plugin_entry[p]->item_count = 0;
         if (cur_plugin == p) cur_plugin = -1;
     }
     
@@ -496,6 +545,96 @@ paste(void) {
 	XFree(p);
 	drawmenu();
 }
+
+void
+init_history(void) {
+    history_index = -1;
+    history_count = 0;
+    history_file = NULL;
+    
+    const char *home_dir = getenv("HOME");
+    if (home_dir == NULL) goto skip_history;
+
+    history_file_path = NULL;
+    asprintf(&history_file_path, "%s/.dlauncher_history", home_dir);
+    if (history_file_path == NULL) goto skip_history;
+    FILE *his_r = fopen(history_file_path, "r");
+    if (his_r == NULL) goto skip_history;
+    
+    char *line = NULL; size_t line_size; ssize_t gl_ret;
+    while ((gl_ret = getline(&line, &line_size, his_r)) >= 0) {
+        if (gl_ret > 0 && line[gl_ret - 1] == '\n')
+            line[gl_ret - 1] = 0;
+        char *h = strdup(line);
+        if (h) add_history_line(h);
+        else break;
+    }
+    if (line) free(line);
+
+    fclose(his_r);
+    
+  skip_history:
+    history_file = fopen(history_file_path, "a");
+}
+
+void
+add_history(const char *name, const char *text) {
+    char *line;
+    asprintf(&line, "%s:%s", name, text);
+    if (line) add_history_line(line);
+}
+
+void
+add_history_line(const char *line) {
+    if (history_count >= HISTORY_SIZE * 2) {
+        int i;
+        for (i = 0; i < HISTORY_SIZE; ++ i) {
+            free((void *)history[i]);
+            history[i] = history[i + HISTORY_SIZE];
+        }
+        history_count -= HISTORY_SIZE;
+
+        /* rewrite the history */
+        if (history_file) {
+            /* truncate file */
+            history_file = freopen(history_file_path, "w", history_file);
+            if (history_file) {
+                for (i = 0; i < history_count; ++ i) {
+                    fputs(history[i], history_file);
+                    fputc('\n', history_file);
+                }
+            }
+        }
+    }
+
+    history[history_count] = line;
+    ++ history_count;
+    history_index = -1;
+
+    if (history_file) {
+        fseek(history_file, 0, SEEK_END);
+        fputs(line, history_file);
+        fputc('\n', history_file);
+        fflush(history_file);
+    }
+}
+
+void jump_to_history(const char *line) {
+    int p_index;
+    for (p_index = 0; p_index < plugin_count; ++ p_index) {
+        int len = strlen(plugin_entry[p_index]->name);
+        /* for completely matching */
+        if (strncmp(plugin_entry[p_index]->name, line, len) == 0 &&
+            line[len] == ':') {
+            fprintf(stderr, "find plugin index %d\n", p_index);
+            cur_plugin = p_index;
+            strncpy(text, line + len + 1, sizeof text);
+            cursor = strlen(text);
+            break;
+        }
+    }
+}
+
 
 void
 run(void) {
