@@ -809,6 +809,11 @@ show(void) {
 
 void
 hide(void) {
+    text[0] = 0;
+    cursor = 0;
+    cur_plugin = -1;
+    prompt = prompt_empty;
+    
     XUnmapWindow(dc->dpy, win);
     XUngrabKeyboard(dc->dpy, CurrentTime);
 }

@@ -1,0 +1,35 @@
+#!/bin/bash
+
+WD=`cd $(dirname $0); pwd`
+LOCK_DIR="/tmp/.dlauncher.lock"
+
+OP=$1; shift
+
+if [ -z "$OP" ]; then 
+    $0 exit
+    $0 start
+elif [ "$OP" = "exit" ]; then
+    while ! mkdir $LOCK_DIR 2>/dev/null; do
+        while [ ! -e $LOCK_DIR/pid -a -d $LOCK_DIR ]; do sleep .5; done
+        _PID=`cat $LOCK_DIR/pid 2>/dev/null`
+        [ -n "$_PID" ] && kill $_PID 2>/dev/null
+    done
+    rmdir $LOCK_DIR
+elif [ "$OP" = "start" ]; then
+    if mkdir $LOCK_DIR 2>/dev/null; then 
+        (
+            ${WD}/dlauncher.bin &
+            _PID=$!
+            echo $_PID > $LOCK_DIR/pid
+            trap '{ rm -rf $LOCK_DIR; }' 0
+            wait $_PID 2>/dev/null
+        ) &
+    fi
+elif [ "$OP" = "open-launcher" ]; then
+    while [ ! -e $LOCK_DIR/pid ]; do
+        $0 start
+        sleep .5
+    done
+    # send waking signal
+    kill -SIGUSR1 `cat $LOCK_DIR/pid`
+fi
