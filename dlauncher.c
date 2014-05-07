@@ -501,10 +501,17 @@ update(void) {
     int  plugin_first = -1;
 
     prompt = prompt_empty;
+    char *plugin_filter = strchr(text, ':');
+    char *input = text;
+    if (plugin_filter) {
+        input = plugin_filter + 1;
+        *plugin_filter = 0;
+    }
 
     int p;
     for (p = 0; p < plugin_count; ++ p) {
-        if (plugin_entry[p]->update(plugin_entry[p], text)) goto skip;
+        if (plugin_filter && strstr(plugin_entry[p]->name, text) == NULL) goto skip;
+        if (plugin_entry[p]->update(plugin_entry[p], input)) goto skip;
         if (plugin_entry[p]->item_count == 0) goto skip;
         
         if (cur_plugin == p) prompt_sel_begin = prompt_ptr;
@@ -526,6 +533,8 @@ update(void) {
         plugin_entry[p]->item_count = 0;
         if (cur_plugin == p) cur_plugin = -1;
     }
+
+    if (plugin_filter) *plugin_filter = ':';
     
     if (cur_plugin < 0)
         cur_plugin = plugin_first;
