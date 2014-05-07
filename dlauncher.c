@@ -98,7 +98,7 @@ static int cur_pindex, prev_pindex, next_pindex, sel_index;
 void register_plugin(dl_plugin_t plugin) {
     if (plugin_count >= NPLUGIN) return;
     /* no comma in name of a plugin is allowed */
-    if (strchr(plugin->name,',')) return;
+    if (strchr(plugin->name, ':')) return;
     plugin_entry[plugin_count ++] = plugin;
 }
 
@@ -401,7 +401,7 @@ keypress(XKeyEvent *ev) {
         return;
         
 	case XK_Home:
-		if(sel_index < 0 || sel_index == 0) {
+		if(cur_plugin < 0 || sel_index < 0 || sel_index == 0) {
 			cursor = 0;
 			break;
 		}
@@ -409,7 +409,7 @@ keypress(XKeyEvent *ev) {
 		calcoffsets();
 		break;
 	case XK_Left:
-		if(cursor > 0 && (sel_index < 0 || sel_index == 0 || lines > 0)) {
+		if(cursor > 0 && (cur_plugin < 0 || sel_index < 0 || sel_index == 0 || lines > 0)) {
 			cursor = nextrune(-1);
 			break;
 		}
@@ -482,7 +482,11 @@ keypress(XKeyEvent *ev) {
 			return;
         
         const char *_text;
-        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);            
+        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+        if (cur_plugin == 0) {
+            /* special case for history */
+            _text = strchr(_text, ':') + 1;
+        }
 
 		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
@@ -681,7 +685,7 @@ hist_plugin_update(dl_plugin_t self, const char *input) {
     int count = 0;
     int i;
     for (i = hist_count - 1; i >= 0; -- i)
-        if (strstr(strchr(hist_line[i], ':'), input))
+        if (strstr(strchr(hist_line[i], ':') + 1, input))
             hist_line_matched[count ++] = hist_line[i];
 
     self->item_count = count;
