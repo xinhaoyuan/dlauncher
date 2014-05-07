@@ -54,13 +54,15 @@ static char       *hist_file_path;
        int         hist_index;
 
 static int hist_plugin_update(dl_plugin_t self, const char *input);
-static int hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **text);
+static int hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr);
+static int hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int hist_plugin_open(dl_plugin_t self, unsigned int index);
 
 static dl_plugin_s hist_plugin = {
     .priv = NULL,
     .name = "hist",
     .update = &hist_plugin_update,
+    .get_desc = &hist_plugin_get_desc,
     .get_text = &hist_plugin_get_text,
     .open = &hist_plugin_open
 };
@@ -174,7 +176,7 @@ calcoffsets(void) {
         next_pindex < plugin_entry[cur_plugin]->item_count;
         ++ next_pindex) {
         const char *_text;
-        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], next_pindex, &_text);
+        plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], next_pindex, &_text);
         int tw = textw(dc, _text);
 		if((i += (lines > 0) ? bh : MIN(tw, n)) > n)
 			break;
@@ -182,7 +184,7 @@ calcoffsets(void) {
 
 	for(i = 0, prev_pindex = cur_pindex - 1; prev_pindex > 0; -- prev_pindex) {
         const char *_text;
-        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);
+        plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], prev_pindex, &_text);
         int tw = textw(dc, _text);
 		if((i += (lines > 0) ? bh : MIN(tw, n)) > n) {
             ++ prev_pindex;
@@ -236,7 +238,7 @@ drawmenu(void) {
 		for(index = cur_pindex; index != next_pindex; ++ index) {
 			dc->y += dc->h;
             const char *_text;
-            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], index, &_text);            
+            plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], index, &_text);            
 			drawtext(dc, _text,
                      (index == sel_index) ? selcol : normcol);
 		}
@@ -249,7 +251,7 @@ drawmenu(void) {
 			drawtext(dc, "<", normcol);
 		for(index = cur_pindex; index != next_pindex; ++ index) {
             const char *_text;
-            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], index, &_text);            
+            plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], index, &_text);            
 
             int tw = textw(dc, _text);
 			dc->x += dc->w;
@@ -483,12 +485,6 @@ keypress(XKeyEvent *ev) {
         
         const char *_text;
         plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
-        fprintf(stderr, "%d %s\n", sel_index, _text);
-        if (cur_plugin == 0) {
-            /* special case for history */
-            _text = strchr(_text, ':') + 1;
-        }
-
 		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
         update();
@@ -696,15 +692,28 @@ hist_plugin_update(dl_plugin_t self, const char *input) {
 }
 
 int
-hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **text)
+hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr)
 {
     if (index >= self->item_count) {
-        *text = NULL;
+        *output_ptr = NULL;
         fprintf(stderr, "get_text out of bound\n");
         return 1;
     }
     
-    *text = hist_line_matched[index];
+    *output_ptr = hist_line_matched[index];
+    return 0;
+}
+
+int
+hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr)
+{
+    if (index >= self->item_count) {
+        *output_ptr = NULL;
+        fprintf(stderr, "get_text out of bound\n");
+        return 1;
+    }
+
+    *output_ptr = strchr(hist_line_matched[index], ':') + 1;
     return 0;
 }
 

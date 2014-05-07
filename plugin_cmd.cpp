@@ -114,6 +114,12 @@ static int _update(dl_plugin_t self, const char *input) {
     return 0;
 }
 
+static int _get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr) {
+    priv_s *p = (priv_s *)self->priv;
+    *output_ptr = p->candidates[index].c_str();
+    return 0;
+}
+
 static int _get_text(dl_plugin_t self, unsigned int index, const char **output_ptr) {
     priv_s *p = (priv_s *)self->priv;
     *output_ptr = p->candidates[index].c_str();
@@ -136,6 +142,7 @@ static __attribute__((constructor)) void _dummy_init(void) {
     _self.item_count = 0;
     _self.item_default_sel = 0;
     _self.update     = &_update;
+    _self.get_desc   = &_get_desc;
     _self.get_text   = &_get_text;
     _self.open       = &_open;
     
