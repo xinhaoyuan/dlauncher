@@ -345,7 +345,7 @@ keypress(XKeyEvent *ev) {
             if (cur_plugin < 0) break;
             int p = (cur_plugin + 1) % plugin_count;
             while (p != cur_plugin && plugin_entry[p]->item_count == 0)
-                p = (cur_plugin + 1) % plugin_count;
+                p = (p + 1) % plugin_count;
             cur_plugin = p;
             update();
             return;
@@ -443,7 +443,6 @@ keypress(XKeyEvent *ev) {
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
-        update();
 		if (cur_plugin >= 0 &&
             sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count &&
             !(ev->state & ShiftMask)) {
@@ -475,7 +474,6 @@ keypress(XKeyEvent *ev) {
         }
 		break;
 	case XK_Tab:
-        update();
 		if(cur_plugin < 0 ||
            sel_index < 0 ||
            sel_index >= plugin_entry[cur_plugin]->item_count)
@@ -483,6 +481,7 @@ keypress(XKeyEvent *ev) {
         
         const char *_text;
         plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+        fprintf(stderr, "%d %s\n", sel_index, _text);
         if (cur_plugin == 0) {
             /* special case for history */
             _text = strchr(_text, ':') + 1;
@@ -490,7 +489,8 @@ keypress(XKeyEvent *ev) {
 
 		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
-		break;
+        update();
+        return;
 	}
 	drawmenu();
 }
@@ -716,7 +716,11 @@ hist_plugin_open(dl_plugin_t self, unsigned int index) {
     hist_apply(hist_line_matched[index]);
     update();
     if (cur_plugin >= 1)        /* not hist itself */
+    {
+        const char *_text = strchr(hist_line_matched[index], ':') + 1;
+        hist_add(plugin_entry[cur_plugin]->name, _text);
         plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], 0);
+    }
 }
 
 
