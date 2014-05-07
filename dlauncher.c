@@ -681,7 +681,7 @@ hist_plugin_update(dl_plugin_t self, const char *input) {
     int count = 0;
     int i;
     for (i = hist_count - 1; i >= 0; -- i)
-        if (strstr(hist_line[i], input))
+        if (strstr(strchr(hist_line[i], ':'), input))
             hist_line_matched[count ++] = hist_line[i];
 
     self->item_count = count;
