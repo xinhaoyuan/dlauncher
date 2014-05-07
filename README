@@ -1,0 +1,18 @@
+DLauncher is a modified dmenu that provide flexible launcher
+functions, which include but not limit to:
+
+ - Dynamic content
+ - Plugin
+ - History
+ - Persistent daemon (wake up by signal)
+
+TODO:
+
+ - more plugin
+   - ssh host plugin
+   - calculator plugin
+   - recent directory plugin
+
+Feel free to hack it.
+
+Check the simple Makefile for how to build/install it.
