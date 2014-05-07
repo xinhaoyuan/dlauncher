@@ -6,14 +6,14 @@ functions, including but not limited to:
  - History
  - Persistent daemon (wake up by signal)
 
-Plugin:
+Plugins:
 
  - cmd: open executable in $PATH
  - ssh: open ssh terminal to host alias
 
 TODO:
 
- - more plugin
+ - more plugins
    - calculator plugin
    - recent directory plugin
 
