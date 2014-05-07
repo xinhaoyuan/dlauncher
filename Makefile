@@ -1,11 +1,16 @@
-.PHONY: install uninstall clean
+.PHONY: _build install uninstall clean
 
 PREFIX = ${HOME}
 V	  ?= @
 
-install:
+_build: build
+	make -C build
+
+build:
 	${V}mkdir -p build
-	${V}cd build && cmake .. && make
+	${V}cd build && cmake .. 
+
+install: _build
 	${V}-build/dlauncher exit
 	${V}cp build/dlauncher build/dlauncher.bin ${PREFIX}/bin/
 
