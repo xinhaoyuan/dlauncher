@@ -441,6 +441,7 @@ keypress(XKeyEvent *ev) {
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
+        update();
 		if (cur_plugin >= 0 &&
             sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count &&
             !(ev->state & ShiftMask)) {
