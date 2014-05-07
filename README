@@ -10,12 +10,14 @@ Plugins:
 
  - cmd: open executable in $PATH
  - ssh: open ssh terminal to host alias
+ - dir: open terminal in a given directory
 
 TODO:
 
  - more plugins
    - calculator plugin
-   - recent directory plugin
+   - url plugin
+   - kill pid plugin
 
 Feel free to hack it.
 

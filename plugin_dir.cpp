@@ -1,3 +1,5 @@
+#define _XOPEN_SOURCE 700
+
 #include "plugin.h"
 #include "dirlist.hpp"
 #include "exec.h"
@@ -30,59 +32,57 @@ static int init_flag = 0;
 static time_t cache_timestamp;
 static vector<string> cache;
 
-static void
-update_cache(void) {
-    time_t nts;
-    time(&nts);
-
-    if (init_flag == 1 && difftime(nts, cache_timestamp) <= 10)
-        return;
-    init_flag = 1;
-    cache_timestamp = nts;
-
-    cache.clear();
-
-    char *path;
-    asprintf(&path, "%s/.ssh/config", getenv("HOME"));
-    FILE *ssh_config = fopen(path, "r");
-
-    if (ssh_config) {
-
-        char *line = NULL; size_t line_size; ssize_t gl_ret;
-        while ((gl_ret = getline(&line, &line_size, ssh_config)) >= 0) {
-            if (strncasecmp(line, "host", 4) == 0 &&
-                (line[4] == '\t' || line[4] == ' ')) {
-
-                // get the trim part of host alias
-                int s = 4;
-                while (line[s] == '\t' || line[s] == ' ') ++ s;
-                if (line[s] == 0) continue;
-                int e = s;
-                while (line[e] != '\t' && line[e] != ' ' && line[e] != '\n' && line[e] != 0) ++ e;
-                line[e] = 0;
-                
-                cache.push_back(line + s);
-            }
-        }
-        if (line) free(line);
-        
-        fclose(ssh_config);
-    }
-
-    free(path);
-
-    sort(cache.begin(), cache.end(), cmpString);
-    vector<string>::iterator it =
-        unique(cache.begin(), cache.end());
-    cache.resize(distance(cache.begin(), it));
-}
-
 static int _update(dl_plugin_t self, const char *input) {
-    update_cache();
     priv_s *p = (priv_s *)self->priv;
     
+    char *base_dir;
+    char *dup_input = strdup(input);
+    for (int i = strlen(dup_input) - 1; i >= 0; -- i) {
+        if (dup_input[i] == '/') break;
+        dup_input[i] = 0;
+    }
+
+    const char *home = getenv("HOME");
+    int home_len = strlen(home);
+    if (input[0] != '/') {
+        asprintf(&base_dir, "%s/%s", home, dup_input);
+        free(dup_input);
+    } else base_dir = dup_input;
+
+    int len = strlen(base_dir);
+    if (len > 0 && base_dir[len - 1] == '/') {
+        base_dir[len - 1] = 0;
+        -- len;
+    }
+
+    vector<string> cache;
+    vector<string> comp;
+
+    int r = dirlist(base_dir[0] ? base_dir : "/", comp, "/tmp/dircache_");
+    if (r == 0)
+    {
+        for (int i = 0; i < comp.size(); ++ i) {
+            ostringstream oss;
+            oss << base_dir << "/" << comp[i];
+            string filename = oss.str();
+            struct stat statbuf;
+            if (stat(filename.c_str(), &statbuf)) continue;
+            if (!S_ISDIR(statbuf.st_mode)) continue;
+            // only directory
+            if (strncmp(filename.c_str(), home, home_len) == 0 && home_len < filename.length()) {
+                // remove $HOME prefix
+                cache.push_back(filename.c_str() + home_len + 1);
+            } else cache.push_back(filename);
+        }
+    }
+
+    free(base_dir);
+
     vector<string> comp_prefix, comp_contain;
-        
+
+    if (strncmp(input, home, home_len) == 0 && home_len < strlen(input))
+        input += home_len + 1;
+
     for (int i = 0; i < cache.size(); ++ i) {
         size_t idx = cache[i].find(input);
         if (idx == 0)
@@ -122,11 +122,19 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
 static int _open(dl_plugin_t self, unsigned int index) {
     priv_s *p = (priv_s *)self->priv;
     vector<string> args;
-    // use urxvt here
+    const char *path = p->candidates[index].c_str();
+    if (path[0] != '/') {
+        char *r;
+        asprintf(&r, "%s/%s", getenv("HOME"), path);
+        path = r;
+    } else path = strdup(path);
+    
     args.push_back("urxvt");
-    args.push_back("-e");
-    args.push_back("ssh");
-    args.push_back(p->candidates[index]);
+    args.push_back("-cd");
+    args.push_back(path);
+
+    free((void *)path);
+    
     execute(args);
     return 0;
 }
@@ -135,7 +143,7 @@ static dl_plugin_s _self;
 
 static __attribute__((constructor)) void _init(void) {
     _self.priv       = new priv_s();
-    _self.name       = "ssh";
+    _self.name       = "dir";
     _self.item_count = 0;
     _self.item_default_sel = 0;
     _self.update     = &_update;
@@ -145,4 +153,3 @@ static __attribute__((constructor)) void _init(void) {
     
     register_plugin(&_self);
 }
-

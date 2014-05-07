@@ -86,9 +86,7 @@ static int _update(dl_plugin_t self, const char *input) {
     update_cache();
     priv_s *p = (priv_s *)self->priv;
     
-    char *path = strdup(getenv("PATH"));
-    char *dir = path, *nextdir;
-    vector<string> comp, comp_prefix, comp_contain;
+    vector<string> comp_prefix, comp_contain;
         
     for (int i = 0; i < cache.size(); ++ i) {
         size_t idx = cache[i].find(input);

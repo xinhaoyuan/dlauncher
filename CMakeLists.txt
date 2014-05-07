@@ -15,7 +15,7 @@ INCLUDE_DIRECTORIES(${XLIB_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${XINERAMA_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${XFT_INCLUDE_DIRS})
 
-ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c dirlist.cpp exec.cpp plugin_cmd.cpp plugin_ssh.cpp)
+ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c dirlist.cpp exec.cpp plugin_cmd.cpp plugin_ssh.cpp plugin_dir)
 
 SET_PROPERTY(TARGET dlauncher.bin APPEND PROPERTY COMPILE_DEFINITIONS VERSION="${DL_VERSION}" XINERAMA)
 TARGET_LINK_LIBRARIES(dlauncher.bin ${XLIB_LIBRARIES} ${XINERAMA_LIBRARIES} ${XFT_LIBRARIES})
