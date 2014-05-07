@@ -63,6 +63,8 @@ static int _update(dl_plugin_t self, const char *input) {
     {
         for (int i = 0; i < comp.size(); ++ i) {
             ostringstream oss;
+            // skip dot files
+            if (comp[i].c_str()[0] == '.') continue;
             oss << base_dir << "/" << comp[i];
             string filename = oss.str();
             struct stat statbuf;
