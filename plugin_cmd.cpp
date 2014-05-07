@@ -26,12 +26,24 @@ cmpString(const string &a, const string &b)
     return strcmp(a.c_str(), b.c_str()) < 0;
 }
 
-static int _update(dl_plugin_t self, const char *input) {
-    priv_s *p = (priv_s *)self->priv;
-    
+static int init_flag = 0;
+static time_t cache_timestamp;
+static vector<string> cache;
+
+static void
+update_cache(void) {
+    time_t nts;
+    time(&nts);
+
+    if (init_flag == 1 && difftime(nts, cache_timestamp) <= 10)
+        return;
+    init_flag = 1;
+    cache_timestamp = nts;
+
+    cache.clear();
+
     char *path = strdup(getenv("PATH"));
     char *dir = path, *nextdir;
-    vector<string> comp_all, comp_prefix, comp_contain;
     vector<string> comp;
         
     while (dir != NULL)
@@ -55,25 +67,39 @@ static int _update(dl_plugin_t self, const char *input) {
                 if (!(statbuf.st_mode & 0111)) continue;
                 // a regular and executable item now
 
-                size_t idx = comp[i].find(input);
-                if (idx == 0)
-                    comp_prefix.push_back(comp[i]);
-                else if (idx != string::npos)
-                    comp_contain.push_back(comp[i]);
+                cache.push_back(comp[i]);
             }
         }
 
         dir = nextdir;
-    }        
+    }
+
+    free(path);
+
+    sort(cache.begin(), cache.end(), cmpString);
+    vector<string>::iterator it =
+        unique(cache.begin(), cache.end());
+    cache.resize(distance(cache.begin(), it));
+}
+
+static int _update(dl_plugin_t self, const char *input) {
+    update_cache();
+    priv_s *p = (priv_s *)self->priv;
+    
+    char *path = strdup(getenv("PATH"));
+    char *dir = path, *nextdir;
+    vector<string> comp, comp_prefix, comp_contain;
+        
+    for (int i = 0; i < cache.size(); ++ i) {
+        size_t idx = cache[i].find(input);
+        if (idx == 0)
+            comp_prefix.push_back(cache[i]);
+        else if (idx != string::npos)
+            comp_contain.push_back(cache[i]);
+    }
 
     sort(comp_prefix.begin(), comp_prefix.end(), cmpString);
     sort(comp_contain.begin(), comp_contain.end(), cmpString);
-
-    vector<string>::iterator it = unique(comp_prefix.begin(), comp_prefix.end());
-    comp_prefix.resize(distance(comp_prefix.begin(), it));
-    it = unique(comp_contain.begin(), comp_contain.end());
-    comp_contain.resize(distance(comp_contain.begin(), it));
-
 
     p->candidates.clear();
 

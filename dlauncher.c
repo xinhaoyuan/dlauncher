@@ -17,6 +17,7 @@
 #include <X11/extensions/Xinerama.h>
 #endif
 #include "draw.h"
+#include "hist.h"
 #include "plugin.h"
 
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
@@ -35,29 +36,34 @@ static size_t nextrune(int inc);
 static void paste(void);
 static void run(void);
 static void usage(void);
-static void init_history(void);
-static void add_history(const char *plugin_name, const char *text);
-static void add_history_line(const char *line);
-static void jump_to_history(const char *line);
-static void rewrite_history_file(void);
 static void setup(void);
 static void calc_geo(void);
 static void show(void);
 static void hide(void);
 static void signal_show(int);
-static void signal_update(int);
 
 static int volatile to_show = 0;
 static int volatile showed = 0;
-static int volatile to_update = 0;
 
-#define HISTORY_SIZE 8192
-#define HISTORY_CMP_MAX 16
-static FILE       *history_file;
-static char       *history_file_path;
-static const char *history[HISTORY_SIZE * 2];
-static int         history_count;
-static int         history_index;
+static void hist_rebuild_file(void);
+static FILE       *hist_file;
+static char       *hist_file_path;
+       const char *hist_line[HIST_SIZE * 2];
+       const char *hist_line_matched[HIST_SIZE * 2]; /* for plugin */
+       int         hist_count;
+       int         hist_index;
+
+static int hist_plugin_update(dl_plugin_t self, const char *input);
+static int hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **text);
+static int hist_plugin_open(dl_plugin_t self, unsigned int index);
+
+static dl_plugin_s hist_plugin = {
+    .priv = NULL,
+    .name = "hist",
+    .update = &hist_plugin_update,
+    .get_text = &hist_plugin_get_text,
+    .open = &hist_plugin_open
+};
 
 static const char *prompt_empty = "DLauncher-"VERSION;
 static char prompt_buf[BUFSIZ] = "";
@@ -83,7 +89,7 @@ static XIC xic;
 
 #define NPLUGIN 200
 
-static unsigned int plugin_count = 0;
+static unsigned int plugin_count = 1; /* hist plugin pre-included */
 static dl_plugin_t  plugin_entry[NPLUGIN];
 
 static int cur_plugin;
@@ -136,19 +142,14 @@ main(int argc, char *argv[]) {
 	dc = initdc();
 	initfont(dc, font);
 
-    init_history();
-    
-    cur_plugin = -1;
-    prompt = prompt_empty;
+    hist_init();
+    plugin_entry[0] = &hist_plugin;
     
     setup();
 
     signal(SIGCHLD, SIG_IGN);
     signal(SIGUSR1, signal_show);
-    signal(SIGALRM, signal_update);
 
-    ualarm(300000, 300000);
-    
 	run();
 
 	return 1; /* unreachable */
@@ -285,6 +286,7 @@ insert(const char *str, ssize_t n) {
 	if(n > 0)
 		memcpy(&text[cursor], str, n);
 	cursor += n;
+    update();
 }
 
 void
@@ -345,22 +347,22 @@ keypress(XKeyEvent *ev) {
             while (p != cur_plugin && plugin_entry[p]->item_count == 0)
                 p = (cur_plugin + 1) % plugin_count;
             cur_plugin = p;
-            drawmenu();
+            update();
             return;
 
         case XK_Up:
-            if (history_index == -1) history_index = history_count;
-            if (history_index == -1) break;
-            if (history_index > 0) -- history_index;
-            jump_to_history(history[history_index]);
+            if (hist_index == -1) hist_index = hist_count;
+            if (hist_index == -1) break;
+            if (hist_index > 0) -- hist_index;
+            hist_apply(hist_line[hist_index]);
             update();
             return;
             
         case XK_Down:
-            if (history_index == -1) history_index = history_count - 1;
-            if (history_index == -1) break;
-            if (history_index < history_count - 1) ++ history_index;
-            jump_to_history(history[history_index]);
+            if (hist_index == -1) hist_index = hist_count - 1;
+            if (hist_index == -1) break;
+            if (hist_index < hist_count - 1) ++ hist_index;
+            hist_apply(hist_line[hist_index]);
             update();
             return;
 
@@ -447,7 +449,7 @@ keypress(XKeyEvent *ev) {
             !(ev->state & ShiftMask)) {
             const char *_text;
             plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
-            add_history(plugin_entry[cur_plugin]->name, _text);
+            hist_add(plugin_entry[cur_plugin]->name, _text);
             plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], sel_index);
         }
         hide();
@@ -491,13 +493,9 @@ keypress(XKeyEvent *ev) {
 
 void
 update(void) {
-    if (strcmp(text_cached, text) == 0) return;
-        
     char *prompt_ptr = prompt_buf;
     char *prompt_sel_begin = prompt_buf, *prompt_sel_end = prompt_buf;
     int  plugin_first = -1;
-
-    strcpy(text_cached, text);
 
     prompt = prompt_empty;
 
@@ -568,18 +566,18 @@ paste(void) {
 }
 
 void
-init_history(void) {
-    history_index = -1;
-    history_count = 0;
-    history_file = NULL;
+hist_init(void) {
+    hist_index = -1;
+    hist_count = 0;
+    hist_file = NULL;
     
     const char *home_dir = getenv("HOME");
     if (home_dir == NULL) goto skip_history;
 
-    history_file_path = NULL;
-    asprintf(&history_file_path, "%s/.dlauncher_history", home_dir);
-    if (history_file_path == NULL) goto skip_history;
-    FILE *his_r = fopen(history_file_path, "r");
+    hist_file_path = NULL;
+    asprintf(&hist_file_path, "%s/.dlauncher_history", home_dir);
+    if (hist_file_path == NULL) goto skip_history;
+    FILE *his_r = fopen(hist_file_path, "r");
     if (his_r == NULL) goto skip_history;
     
     char *line = NULL; size_t line_size; ssize_t gl_ret;
@@ -587,7 +585,7 @@ init_history(void) {
         if (gl_ret > 0 && line[gl_ret - 1] == '\n')
             line[gl_ret - 1] = 0;
         char *h = strdup(line);
-        if (h) add_history_line(h);
+        if (h) hist_add_line(h);
         else break;
     }
     if (line) free(line);
@@ -595,73 +593,75 @@ init_history(void) {
     fclose(his_r);
     
   skip_history:
-    history_file = fopen(history_file_path, "a");
+    hist_file = fopen(hist_file_path, "a");
 }
 
 void
-add_history(const char *name, const char *text) {
+hist_add(const char *name, const char *text) {
+    if (strcmp(name, "hist") == 0) return;
+
     char *line;
     asprintf(&line, "%s:%s", name, text);
-    if (line) add_history_line(line);
+    if (line) hist_add_line(line);
 }
 
 void
-add_history_line(const char *line) {
+hist_add_line(const char *line) {
     int i;
-    for (i = history_count - 1;
-         i >= 0 && i >= history_count - HISTORY_CMP_MAX; -- i) {
-        if (strcmp(line, history[i]) == 0) {
+    for (i = hist_count - 1;
+         i >= 0 && i >= hist_count - HIST_CMP_MAX; -- i) {
+        if (strcmp(line, hist_line[i]) == 0) {
             free((void *)line);
 
             int j;
-            line = history[i];
-            for (j = i; j < history_count - 1; ++ j)
-                history[j] = history[j + 1];
-            history[history_count - 1] = line;
+            line = hist_line[i];
+            for (j = i; j < hist_count - 1; ++ j)
+                hist_line[j] = hist_line[j + 1];
+            hist_line[hist_count - 1] = line;
 
-            rewrite_history_file();
+            hist_rebuild_file();
             return;
         }
     }
     
-    if (history_count >= HISTORY_SIZE * 2) {
+    if (hist_count >= HIST_SIZE * 2) {
         int i;
-        for (i = 0; i < HISTORY_SIZE; ++ i) {
-            free((void *)history[i]);
-            history[i] = history[i + HISTORY_SIZE];
+        for (i = 0; i < HIST_SIZE; ++ i) {
+            free((void *)hist_line[i]);
+            hist_line[i] = hist_line[i + HIST_SIZE];
         }
-        history_count -= HISTORY_SIZE;
-        rewrite_history_file();
+        hist_count -= HIST_SIZE;
+        hist_rebuild_file();
     }
 
-    history[history_count] = line;
-    ++ history_count;
-    history_index = -1;
+    hist_line[hist_count] = line;
+    ++ hist_count;
+    hist_index = -1;
 
-    if (history_file) {
-        fseek(history_file, 0, SEEK_END);
-        fputs(line, history_file);
-        fputc('\n', history_file);
-        fflush(history_file);
+    if (hist_file) {
+        fputs(line, hist_file);
+        fputc('\n', hist_file);
+        fflush(hist_file);
     }
 }
 
 void
-rewrite_history_file(void) {
+hist_rebuild_file(void) {
     int i;
-    if (history_file) {
-        history_file = freopen(history_file_path, "w", history_file);
-        if (history_file) {
-            for (i = 0; i < history_count; ++ i) {
-                fputs(history[i], history_file);
-                fputc('\n', history_file);
+    if (hist_file) {
+        hist_file = freopen(hist_file_path, "w", hist_file);
+        if (hist_file) {
+            for (i = 0; i < hist_count; ++ i) {
+                fputs(hist_line[i], hist_file);
+                fputc('\n', hist_file);
             }
+            fflush(hist_file);
         }
     }
 }
 
 void
-jump_to_history(const char *line) {
+hist_apply(const char *line) {
     int p_index;
     for (p_index = 0; p_index < plugin_count; ++ p_index) {
         int len = strlen(plugin_entry[p_index]->name);
@@ -676,6 +676,46 @@ jump_to_history(const char *line) {
     }
 }
 
+int
+hist_plugin_update(dl_plugin_t self, const char *input) {
+    int count = 0;
+    int i;
+    for (i = hist_count - 1; i >= 0; -- i)
+        if (strstr(hist_line[i], input))
+            hist_line_matched[count ++] = hist_line[i];
+
+    self->item_count = count;
+    self->item_default_sel = count ? 0 : -1;
+    return 0;
+}
+
+int
+hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **text)
+{
+    if (index >= self->item_count) {
+        *text = NULL;
+        fprintf(stderr, "get_text out of bound\n");
+        return 1;
+    }
+    
+    *text = hist_line_matched[index];
+    return 0;
+}
+
+int
+hist_plugin_open(dl_plugin_t self, unsigned int index) {
+    if (index >= self->item_count) {
+        fprintf(stderr, "open out of bound\n");
+        return 1;
+    }
+
+    hist_apply(hist_line_matched[index]);
+    update();
+    if (cur_plugin >= 1)        /* not hist itself */
+        plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], 0);
+}
+
+
 
 void
 run(void) {
@@ -688,11 +728,6 @@ run(void) {
         if (to_show) {
             to_show = 0;
             show();
-        }
-
-        if (to_update && showed) {
-            to_update = 0;
-            update();
         }
 
         while (XPending(dc->dpy)) {
@@ -821,11 +856,6 @@ signal_show(int signo) {
 }
 
 void
-signal_update(int signo) {
-    to_update = 1;
-}
-
-void
 show(void) {
     grabkeyboard();
 
@@ -835,7 +865,7 @@ show(void) {
     XResizeWindow(dc->dpy, win, mw, mh);
     XMapRaised(dc->dpy, win);
 	resizedc(dc, mw, mh);
-	drawmenu();
+	update();
 
     showed = 1;
 }
@@ -846,7 +876,7 @@ hide(void) {
     cursor = 0;
     cur_plugin = -1;
     prompt = prompt_empty;
-    history_index = -1;
+    hist_index = -1;
     showed = 0;
     
     XUnmapWindow(dc->dpy, win);
