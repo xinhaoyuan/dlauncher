@@ -62,6 +62,7 @@ static int hist_plugin_open(dl_plugin_t self, unsigned int index);
 static dl_plugin_s hist_plugin = {
     .priv = NULL,
     .name = "hist",
+    .priority = 100,
     .update = &hist_plugin_update,
     .get_desc = &hist_plugin_get_desc,
     .get_text = &hist_plugin_get_text,
@@ -502,7 +503,8 @@ void
 update(void) {
     char *prompt_ptr = prompt_buf;
     char *prompt_sel_begin = prompt_buf, *prompt_sel_end = prompt_buf;
-    int  plugin_first = -1;
+    int  plugin_best = -1;
+    char *prompt_best_begin = prompt_buf, *prompt_best_end = prompt_buf;
 
     prompt = prompt_empty;
     char *plugin_filter = strchr(text, ':');
@@ -524,10 +526,10 @@ update(void) {
         prompt_ptr += w - 1;
         if (cur_plugin == p) prompt_sel_end = prompt_ptr;
 
-        if (plugin_first == -1) {
-            plugin_first = p;
-            prompt_sel_begin = prompt_buf;
-            prompt_sel_end = prompt_ptr;
+        if (plugin_best == -1 || plugin_entry[p]->priority > plugin_entry[plugin_best]->priority) {
+            plugin_best = p;
+            prompt_best_begin = prompt_ptr - w + 1;
+            prompt_best_end = prompt_ptr;
         }
         
         continue;
@@ -540,8 +542,11 @@ update(void) {
 
     if (plugin_filter) *plugin_filter = ':';
     
-    if (cur_plugin < 0)
-        cur_plugin = plugin_first;
+    if (cur_plugin < 0) {
+        cur_plugin = plugin_best;
+        prompt_sel_begin = prompt_best_begin;
+        prompt_sel_end = prompt_best_end;
+    }
     
     if (cur_plugin >= 0) {
         *prompt_sel_begin = '[';

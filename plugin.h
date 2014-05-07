@@ -12,6 +12,7 @@ extern "C" {
         void *priv;
 
         const char *name;
+        int priority;
 
         unsigned int item_count;
         unsigned int item_default_sel;

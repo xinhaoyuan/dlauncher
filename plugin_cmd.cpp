@@ -137,6 +137,7 @@ static dl_plugin_s _self;
 static __attribute__((constructor)) void _init(void) {
     _self.priv       = new priv_s();
     _self.name       = "cmd";
+    _self.priority   = 50;
     _self.item_count = 0;
     _self.item_default_sel = 0;
     _self.update     = &_update;
