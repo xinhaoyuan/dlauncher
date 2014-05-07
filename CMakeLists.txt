@@ -10,7 +10,7 @@ FIND_PACKAGE(PkgConfig REQUIRED)
 PKG_CHECK_MODULES(XLIB REQUIRED x11)
 PKG_CHECK_MODULES(XINERAMA REQUIRED xinerama)
 
-ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c dirlist.cpp exec.cpp plugin_cmd.cpp)
+ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c dirlist.cpp exec.cpp plugin_cmd.cpp plugin_ssh.cpp)
 
 SET_PROPERTY(TARGET dlauncher.bin APPEND PROPERTY COMPILE_DEFINITIONS VERSION="${DL_VERSION}" XINERAMA)
 TARGET_LINK_LIBRARIES(dlauncher.bin ${XLIB_LIBRARIES} ${XINERAMA_LIBRARIES})

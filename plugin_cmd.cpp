@@ -134,9 +134,9 @@ static int _open(dl_plugin_t self, unsigned int index) {
     return 0;
 }
 
-dl_plugin_s _self;
+static dl_plugin_s _self;
 
-static __attribute__((constructor)) void _dummy_init(void) {
+static __attribute__((constructor)) void _init(void) {
     _self.priv       = new priv_s();
     _self.name       = "cmd";
     _self.item_count = 0;
