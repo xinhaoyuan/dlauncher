@@ -203,6 +203,11 @@ cistrstr(const char *s, const char *sub) {
 	return NULL;
 }
 
+static int ru2p(int i) {
+    if (i == 0) return 0;
+    else return 1 << (32 - __builtin_clz(i));
+}
+
 void
 drawmenu(void) {
 	int curpos;
@@ -215,16 +220,12 @@ drawmenu(void) {
 
 	if (prompt) {
         promptw = textw(dc, prompt);
-        /* if (promptw) */
-        /*     promptw = 1 << (32 - __builtin_clz(promptw)); */
 		dc->w = promptw;
 		drawtext(dc, prompt, selcol);
 		dc->x = dc->w;
-	}
+	} else promptw = 0;
 
-    inputw = textw(dc, text);
-    if (inputw)
-        inputw = 1 << (32 - __builtin_clz(inputw));
+    inputw = ru2p(MIN(mw / 10, textw(dc, text) + promptw)) - promptw;
     
 	/* draw input field */
 	dc->w = (lines > 0 || cur_plugin < 0) ? mw - dc->x : inputw;
