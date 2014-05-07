@@ -228,7 +228,8 @@ drawmenu(void) {
 		dc->x = dc->w;
 	} else promptw = 0;
 
-    inputw = ru2p(MIN(mw / 10, textw(dc, text) + promptw)) - promptw;
+    inputw = ru2p(MAX(mw / 10, textw(dc, text) + promptw)) - promptw;
+    inputw = MIN(mw / 2, inputw);
     
 	/* draw input field */
 	dc->w = (lines > 0 || cur_plugin < 0) ? mw - dc->x : inputw;
