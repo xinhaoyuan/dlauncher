@@ -514,6 +514,9 @@ update(void) {
         *plugin_filter = 0;
     }
 
+    if (cur_plugin >= 0 && plugin_entry[cur_plugin]->priority < 0)
+        cur_plugin = -1;
+
     int p;
     for (p = 0; p < plugin_count; ++ p) {
         if (plugin_filter && strstr(plugin_entry[p]->name, text) == NULL) goto skip;

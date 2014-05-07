@@ -53,7 +53,7 @@ static dl_plugin_s _self;
 static __attribute__((constructor)) void _init(void) {
     _self.priv       = new string();
     _self.name       = "shell";
-    _self.priority   = 10;
+    _self.priority   = -10;
     _self.item_count = 0;
     _self.item_default_sel = 0;
     _self.update     = &_update;
