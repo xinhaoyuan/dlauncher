@@ -20,6 +20,7 @@
 #include "hist.h"
 #include "plugin.h"
 
+#define DEFAULT_FONT "Monospace-11"
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
                              * MAX(0, MIN((y)+(h),(r).y_org+(r).height) - MAX((y),(r).y_org)))
 #define MIN(a,b)              ((a) < (b) ? (a) : (b))
@@ -81,8 +82,8 @@ static const char *normfgcolor = "#bbbbbb";
 static const char *selbgcolor  = "#005577";
 static const char *selfgcolor  = "#eeeeee";
 static unsigned int lines = 0;
-static unsigned long normcol[ColLast];
-static unsigned long selcol[ColLast];
+static ColorSet *normcol;
+static ColorSet *selcol;
 static Atom clip, utf8;
 static Bool topbar = True;
 static DC *dc;
@@ -142,7 +143,9 @@ main(int argc, char *argv[]) {
 			usage();
 
 	dc = initdc();
-	initfont(dc, font);
+	initfont(dc, font ? font : DEFAULT_FONT);
+    normcol = initcolor(dc, normfgcolor, normbgcolor);
+	selcol = initcolor(dc, selfgcolor, selbgcolor);
 
     hist_init();
     plugin_entry[0] = &hist_plugin;
@@ -216,7 +219,7 @@ drawmenu(void) {
 	dc->x = 0;
 	dc->y = 0;
 	dc->h = bh;
-	drawrect(dc, 0, 0, mw, mh, True, BG(dc, normcol));
+	drawrect(dc, 0, 0, mw, mh, True, normcol->BG);
 
 	if (prompt) {
         promptw = textw(dc, prompt);
@@ -231,7 +234,7 @@ drawmenu(void) {
 	dc->w = (lines > 0 || cur_plugin < 0) ? mw - dc->x : inputw;
 	drawtext(dc, text, normcol);
 	if((curpos = textnw(dc, text, cursor) + dc->h/2 - 2) < dc->w)
-		drawrect(dc, curpos, 2, 1, dc->h - 4, True, FG(dc, normcol));
+		drawrect(dc, curpos, 2, 1, dc->h - 4, True, normcol->FG);
 
 	if(lines > 0) {
 		/* draw vertical list */
@@ -849,11 +852,6 @@ setup(void) {
 	XSetWindowAttributes swa;
 	XIM xim;
 
-	normcol[ColBG] = getcolor(dc, normbgcolor);
-	normcol[ColFG] = getcolor(dc, normfgcolor);
-	selcol[ColBG]  = getcolor(dc, selbgcolor);
-	selcol[ColFG]  = getcolor(dc, selfgcolor);
-
 	clip = XInternAtom(dc->dpy, "CLIPBOARD",   False);
 	utf8 = XInternAtom(dc->dpy, "UTF8_STRING", False);
 
@@ -866,7 +864,7 @@ setup(void) {
     
 	/* create menu window */
 	swa.override_redirect = True;
-	swa.background_pixel = normcol[ColBG];
+	swa.background_pixel = normcol->BG;
 	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask;
 	win = XCreateWindow(dc->dpy, root, mx, my, mw, mh, 0,
 	                    DefaultDepth(dc->dpy, screen), CopyFromParent,
@@ -887,9 +885,7 @@ signal_show(int signo) {
 void
 show(void) {
     grabkeyboard();
-
     calc_geo();
-
     XMoveWindow(dc->dpy, win, mx, my);
     XResizeWindow(dc->dpy, win, mw, mh);
     XMapRaised(dc->dpy, win);
@@ -907,7 +903,7 @@ hide(void) {
     prompt = prompt_empty;
     hist_index = -1;
     showed = 0;
-    
+
     XUnmapWindow(dc->dpy, win);
     XUngrabKeyboard(dc->dpy, CurrentTime);
 }
