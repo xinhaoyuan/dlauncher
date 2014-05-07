@@ -44,8 +44,11 @@ static void calc_geo(void);
 static void show(void);
 static void hide(void);
 static void signal_show(int);
+static void signal_update(int);
 
 static int volatile to_show = 0;
+static int volatile showed = 0;
+static int volatile to_update = 0;
 
 #define HISTORY_SIZE 8192
 #define HISTORY_CMP_MAX 16
@@ -58,6 +61,7 @@ static int         history_index;
 static const char *prompt_empty = "DLauncher-"VERSION;
 static char prompt_buf[BUFSIZ] = "";
 static char text[BUFSIZ] = "";
+static char text_cached[BUFSIZ] = "";
 static int bh, mx, my, mw, mh;
 static int inputw, promptw;
 static size_t cursor = 0;
@@ -140,6 +144,9 @@ main(int argc, char *argv[]) {
 
     signal(SIGCHLD, SIG_IGN);
     signal(SIGUSR1, signal_show);
+    signal(SIGALRM, signal_update);
+
+    ualarm(300000, 300000);
     
 	run();
 
@@ -225,7 +232,7 @@ drawmenu(void) {
 		for(index = cur_pindex; index != next_pindex; ++ index) {
 			dc->y += dc->h;
             const char *_text;
-            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);            
+            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], index, &_text);            
 			drawtext(dc, _text,
                      (index == sel_index) ? selcol : normcol);
 		}
@@ -238,7 +245,7 @@ drawmenu(void) {
 			drawtext(dc, "<", normcol);
 		for(index = cur_pindex; index != next_pindex; ++ index) {
             const char *_text;
-            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);            
+            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], index, &_text);            
 
             int tw = textw(dc, _text);
 			dc->x += dc->w;
@@ -277,7 +284,6 @@ insert(const char *str, ssize_t n) {
 	if(n > 0)
 		memcpy(&text[cursor], str, n);
 	cursor += n;
-	update();
 }
 
 void
@@ -307,7 +313,6 @@ keypress(XKeyEvent *ev) {
 
 		case XK_k: /* delete right */
 			text[cursor] = '\0';
-			update();
 			break;
 		case XK_u: /* delete left */
 			insert(NULL, 0 - cursor);
@@ -339,17 +344,15 @@ keypress(XKeyEvent *ev) {
             while (p != cur_plugin && plugin_entry[p]->item_count == 0)
                 p = (cur_plugin + 1) % plugin_count;
             cur_plugin = p;
-            update();
             drawmenu();
             return;
 
         case XK_Up:
-            if (history_index == -1) history_index = history_count - 1;
+            if (history_index == -1) history_index = history_count;
             if (history_index == -1) break;
             if (history_index > 0) -- history_index;
             jump_to_history(history[history_index]);
             update();
-            drawmenu();
             return;
             
         case XK_Down:
@@ -358,7 +361,6 @@ keypress(XKeyEvent *ev) {
             if (history_index < history_count - 1) ++ history_index;
             jump_to_history(history[history_index]);
             update();
-            drawmenu();
             return;
 
 		default:
@@ -469,17 +471,17 @@ keypress(XKeyEvent *ev) {
         }
 		break;
 	case XK_Tab:
+        update();
 		if(cur_plugin < 0 ||
            sel_index < 0 ||
            sel_index >= plugin_entry[cur_plugin]->item_count)
 			return;
         
         const char *_text;
-        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], prev_pindex, &_text);            
+        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);            
 
 		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
-		update();
 		break;
 	}
 	drawmenu();
@@ -487,17 +489,19 @@ keypress(XKeyEvent *ev) {
 
 void
 update(void) {
-	char buf[sizeof text];
+    if (strcmp(text_cached, text) == 0) return;
+        
     char *prompt_ptr = prompt_buf;
     char *prompt_sel_begin = prompt_buf, *prompt_sel_end = prompt_buf;
     int  plugin_first = -1;
-    
-    strcpy(buf, text);
+
+    strcpy(text_cached, text);
+
     prompt = prompt_empty;
 
     int p;
     for (p = 0; p < plugin_count; ++ p) {
-        if (plugin_entry[p]->update(plugin_entry[p], buf)) goto skip;
+        if (plugin_entry[p]->update(plugin_entry[p], text)) goto skip;
         if (plugin_entry[p]->item_count == 0) goto skip;
         
         if (cur_plugin == p) prompt_sel_begin = prompt_ptr;
@@ -533,6 +537,8 @@ update(void) {
 
         calcoffsets();
     }
+
+    drawmenu();
 }
 
 size_t
@@ -663,17 +669,16 @@ run(void) {
     int x11_fd = ConnectionNumber(dc->dpy);
     fd_set in_fds;
     struct timeval tv;
-    
-	while(1) {
-        FD_ZERO(&in_fds);
-        FD_SET(x11_fd, &in_fds);
 
-        tv.tv_usec = 0;
-        tv.tv_sec = 1;
-        
+	while(1) {
         if (to_show) {
             to_show = 0;
             show();
+        }
+
+        if (to_update && showed) {
+            to_update = 0;
+            update();
         }
 
         while (XPending(dc->dpy)) {
@@ -698,8 +703,14 @@ run(void) {
                 break;
             }
         }
-        
-        select(x11_fd+1, &in_fds, 0, 0, &tv);
+
+        FD_ZERO(&in_fds);
+        FD_SET(x11_fd, &in_fds);
+
+        tv.tv_usec = 0;
+        tv.tv_sec = 1;
+
+        select(x11_fd + 1, &in_fds, 0, 0, &tv);
     }
 }
 
@@ -796,6 +807,11 @@ signal_show(int signo) {
 }
 
 void
+signal_update(int signo) {
+    to_update = 1;
+}
+
+void
 show(void) {
     grabkeyboard();
 
@@ -806,6 +822,8 @@ show(void) {
     XMapRaised(dc->dpy, win);
 	resizedc(dc, mw, mh);
 	drawmenu();
+
+    showed = 1;
 }
 
 void
@@ -814,6 +832,7 @@ hide(void) {
     cursor = 0;
     cur_plugin = -1;
     prompt = prompt_empty;
+    showed = 0;
     
     XUnmapWindow(dc->dpy, win);
     XUngrabKeyboard(dc->dpy, CurrentTime);

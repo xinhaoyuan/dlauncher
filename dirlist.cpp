@@ -72,14 +72,14 @@ decode_path(string &result, const string &epath) {
 
 
 int
-dirlist(const string &dirname, vector<string> &r, const string &cache_dir) {
+dirlist(const string &dirname, vector<string> &r, const string &cache_file_prefix) {
     int cached = 0;
     string edirname;
     string cachename;
     ostringstream oss;
     
     encode_path(edirname, dirname);
-    oss << cache_dir << "/" << edirname;
+    oss << cache_file_prefix << edirname;
     cachename = oss.str();
 
     time_t dir_time, cache_time;
