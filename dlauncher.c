@@ -39,6 +39,7 @@ static void init_history(void);
 static void add_history(const char *plugin_name, const char *text);
 static void add_history_line(const char *line);
 static void jump_to_history(const char *line);
+static void rewrite_history_file(void);
 static void setup(void);
 static void calc_geo(void);
 static void show(void);
@@ -610,6 +611,14 @@ add_history_line(const char *line) {
          i >= 0 && i >= history_count - HISTORY_CMP_MAX; -- i) {
         if (strcmp(line, history[i]) == 0) {
             free((void *)line);
+
+            int j;
+            line = history[i];
+            for (j = i; j < history_count - 1; ++ j)
+                history[j] = history[j + 1];
+            history[history_count - 1] = line;
+
+            rewrite_history_file();
             return;
         }
     }
@@ -621,18 +630,7 @@ add_history_line(const char *line) {
             history[i] = history[i + HISTORY_SIZE];
         }
         history_count -= HISTORY_SIZE;
-
-        /* rewrite the history */
-        if (history_file) {
-            /* truncate file */
-            history_file = freopen(history_file_path, "w", history_file);
-            if (history_file) {
-                for (i = 0; i < history_count; ++ i) {
-                    fputs(history[i], history_file);
-                    fputc('\n', history_file);
-                }
-            }
-        }
+        rewrite_history_file();
     }
 
     history[history_count] = line;
@@ -647,7 +645,22 @@ add_history_line(const char *line) {
     }
 }
 
-void jump_to_history(const char *line) {
+void
+rewrite_history_file(void) {
+    int i;
+    if (history_file) {
+        history_file = freopen(history_file_path, "w", history_file);
+        if (history_file) {
+            for (i = 0; i < history_count; ++ i) {
+                fputs(history[i], history_file);
+                fputc('\n', history_file);
+            }
+        }
+    }
+}
+
+void
+jump_to_history(const char *line) {
     int p_index;
     for (p_index = 0; p_index < plugin_count; ++ p_index) {
         int len = strlen(plugin_entry[p_index]->name);
@@ -832,6 +845,7 @@ hide(void) {
     cursor = 0;
     cur_plugin = -1;
     prompt = prompt_empty;
+    history_index = -1;
     showed = 0;
     
     XUnmapWindow(dc->dpy, win);
