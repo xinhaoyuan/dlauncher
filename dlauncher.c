@@ -213,6 +213,8 @@ drawmenu(void) {
 
 	if (prompt) {
         promptw = textw(dc, prompt);
+        /* if (promptw) */
+        /*     promptw = 1 << (32 - __builtin_clz(promptw)); */
 		dc->w = promptw;
 		drawtext(dc, prompt, selcol);
 		dc->x = dc->w;
