@@ -32,7 +32,7 @@ static void drawmenu(void);
 static void grabkeyboard(void);
 static void insert(const char *str, ssize_t n);
 static void keypress(XKeyEvent *ev);
-static void update(void);
+static void update(int no_escape);
 static size_t nextrune(int inc);
 static void paste(void);
 static void run(void);
@@ -296,7 +296,7 @@ insert(const char *str, ssize_t n) {
 	if(n > 0)
 		memcpy(&text[cursor], str, n);
 	cursor += n;
-    update();
+    update(0);
 }
 
 void
@@ -357,7 +357,7 @@ keypress(XKeyEvent *ev) {
             while (p != cur_plugin && plugin_entry[p]->item_count == 0)
                 p = (p + 1) % plugin_count;
             cur_plugin = p;
-            update();
+            update(1);
             return;
 
         case XK_Up:
@@ -365,7 +365,7 @@ keypress(XKeyEvent *ev) {
             if (hist_index == -1) break;
             if (hist_index > 0) -- hist_index;
             hist_apply(hist_line[hist_index]);
-            update();
+            update(0);
             return;
             
         case XK_Down:
@@ -373,7 +373,7 @@ keypress(XKeyEvent *ev) {
             if (hist_index == -1) break;
             if (hist_index < hist_count - 1) ++ hist_index;
             hist_apply(hist_line[hist_index]);
-            update();
+            update(0);
             return;
 
 		default:
@@ -493,14 +493,14 @@ keypress(XKeyEvent *ev) {
         plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
 		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
-        update();
+        update(1);
         return;
 	}
 	drawmenu();
 }
 
 void
-update(void) {
+update(int no_escape) {
     char *prompt_ptr = prompt_buf;
     char *prompt_sel_begin = prompt_buf, *prompt_sel_end = prompt_buf;
     int  plugin_best = -1;
@@ -514,7 +514,7 @@ update(void) {
         *plugin_filter = 0;
     }
 
-    if (cur_plugin >= 0 && plugin_entry[cur_plugin]->priority < 0)
+    if (no_escape == 0 && cur_plugin >= 0 && plugin_entry[cur_plugin]->priority < 0)
         cur_plugin = -1;
 
     int p;
@@ -747,7 +747,7 @@ hist_plugin_open(dl_plugin_t self, unsigned int index) {
     }
 
     hist_apply(hist_line_matched[index]);
-    update();
+    update(0);
     if (cur_plugin >= 1)        /* not hist itself */
     {
         const char *_text = strchr(hist_line_matched[index], ':') + 1;
@@ -899,7 +899,7 @@ show(void) {
     XResizeWindow(dc->dpy, win, mw, mh);
     XMapRaised(dc->dpy, win);
 	resizedc(dc, mw, mh);
-	update();
+	update(0);
 
     showed = 1;
 }
