@@ -46,6 +46,8 @@ static void signal_show(int);
 static int volatile to_show = 0;
 static int volatile showed = 0;
 
+static void hist_show_prev(void);
+static void hist_show_next(void);
 static void hist_rebuild_file(void);
 static FILE       *hist_file;
 static char       *hist_file_path;
@@ -101,10 +103,13 @@ static int cur_pindex, prev_pindex, next_pindex, sel_index;
 
 void register_plugin(dl_plugin_t plugin) {
     if (plugin_count >= NPLUGIN) return;
-    /* no comma in name of a plugin is allowed */
+    /* no semicolon in the name of a plugin is allowed */
     if (strchr(plugin->name, ':')) return;
     plugin_entry[plugin_count ++] = plugin;
 }
+
+static void plugin_cycle_next(void);
+static void plugin_cycle_prev(void);
 
 static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
 static char *(*fstrstr)(const char *, const char *) = strstr;
@@ -347,34 +352,15 @@ keypress(XKeyEvent *ev) {
 		switch(ksym) {
 		case XK_g: ksym = XK_Home;  break;
 		case XK_G: ksym = XK_End;   break;
+        case XK_a:
 		case XK_h: ksym = XK_Up;    break;
+        case XK_d:
+		case XK_l: ksym = XK_Down;  break;
 		case XK_j: ksym = XK_Next;  break;
 		case XK_k: ksym = XK_Prior; break;
-		case XK_l: ksym = XK_Down;  break;
-        case XK_Tab:
-            if (cur_plugin < 0) break;
-            int p = (cur_plugin + 1) % plugin_count;
-            while (p != cur_plugin && plugin_entry[p]->item_count == 0)
-                p = (p + 1) % plugin_count;
-            cur_plugin = p;
-            update(1);
-            return;
-
-        case XK_Up:
-            if (hist_index == -1) hist_index = hist_count;
-            if (hist_index == -1) break;
-            if (hist_index > 0) -- hist_index;
-            hist_apply(hist_line[hist_index]);
-            update(0);
-            return;
-            
-        case XK_Down:
-            if (hist_index == -1) hist_index = hist_count - 1;
-            if (hist_index == -1) break;
-            if (hist_index < hist_count - 1) ++ hist_index;
-            hist_apply(hist_line[hist_index]);
-            update(0);
-            return;
+        case XK_Tab:  plugin_cycle_next(); return;
+        case XK_Up:   hist_show_prev(); return;
+        case XK_Down: hist_show_next(); return;
 
 		default:
 			return;
@@ -411,7 +397,7 @@ keypress(XKeyEvent *ev) {
         return;
         
 	case XK_Home:
-		if(cur_plugin < 0 || sel_index < 0 || sel_index == 0) {
+		if (cur_plugin < 0 || sel_index < 0 || sel_index == 0) {
 			cursor = 0;
 			break;
 		}
@@ -700,6 +686,24 @@ hist_apply(const char *line) {
     }
 }
 
+void
+hist_show_prev(void) {
+    if (hist_index == -1) hist_index = hist_count;
+    if (hist_index == -1) return;
+    if (hist_index > 0) -- hist_index;
+    hist_apply(hist_line[hist_index]);
+    update(0);
+}
+
+void
+hist_show_next(void) {
+    if (hist_index == -1) hist_index = hist_count - 1;
+    if (hist_index == -1) return;
+    if (hist_index < hist_count - 1) ++ hist_index;
+    hist_apply(hist_line[hist_index]);
+    update(0);
+}
+
 int
 hist_plugin_update(dl_plugin_t self, const char *input) {
     int count = 0;
@@ -884,6 +888,16 @@ setup(void) {
 	xim = XOpenIM(dc->dpy, NULL, NULL, NULL);
 	xic = XCreateIC(xim, XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
 	                XNClientWindow, win, XNFocusWindow, win, NULL);
+}
+
+void
+plugin_cycle_next(void) {
+    if (cur_plugin < 0) return;
+    int p = (cur_plugin + 1) % plugin_count;
+    while (p != cur_plugin && plugin_entry[p]->item_count == 0)
+        p = (p + 1) % plugin_count;
+    cur_plugin = p;
+    update(1);
 }
 
 void
