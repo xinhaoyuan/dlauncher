@@ -38,9 +38,6 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
 static int _open(dl_plugin_t self, unsigned int index) {
     string *p = (string *)self->priv;
     vector<string> args;
-    // use urxvt here
-    args.push_back("urxvt");
-    args.push_back("-e");
     args.push_back("sh");
     args.push_back("-c");
     args.push_back(*p);
