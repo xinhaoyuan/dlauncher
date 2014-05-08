@@ -17,6 +17,12 @@
 using namespace std;
 
 static int _update(dl_plugin_t self, const char *input) {
+    if (strchr(input, '/') == NULL &&
+        strchr(input, ' ') == NULL) {
+        self->item_count = 0;
+        return 0;
+    }
+    
     string *p = (string *)self->priv;
     p->assign(input);
     self->item_count = 1;
