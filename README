@@ -11,6 +11,7 @@ Plugins:
  - cmd: open executable in $PATH
  - ssh: open ssh terminal to host alias
  - dir: open terminal in a given directory
+ - shell: run input in a shell 
 
 TODO:
 

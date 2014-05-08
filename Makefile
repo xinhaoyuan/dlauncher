@@ -1,7 +1,7 @@
 .PHONY: _build install uninstall clean
 
-PREFIX = ${HOME}
-V	  ?= @
+PREFIX ?= /usr/local
+V	   ?= @
 
 _build: build
 	make -C build
@@ -12,7 +12,8 @@ build:
 
 install: _build
 	${V}-build/dlauncher exit
-	${V}cp build/dlauncher build/dlauncher.bin ${PREFIX}/bin/
+	${V}install -m 0755 build/dlauncher ${PREFIX}/bin/
+	${V}install -m 0755 build/dlauncher.bin ${PREFIX}/bin/
 
 uninstall:
 	${V}-dlauncher exit
