@@ -901,6 +901,17 @@ plugin_cycle_next(void) {
 }
 
 void
+plugin_cycle_prev(void) {
+    if (cur_plugin < 0) return;
+    int step = plugin_count - 1;
+    int p = (cur_plugin + step) % plugin_count;
+    while (p != cur_plugin && plugin_entry[p]->item_count == 0)
+        p = (p + step) % plugin_count;
+    cur_plugin = p;
+    update(1);
+}
+
+void
 signal_show(int signo) {
     to_show = 1;
 }

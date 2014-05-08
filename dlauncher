@@ -18,7 +18,8 @@ elif [ "$OP" = "exit" ]; then
 elif [ "$OP" = "start" ]; then
     if mkdir $LOCK_DIR 2>/dev/null; then 
         (
-            ${WD}/dlauncher.bin &
+            [ -r $HOME/.dlauncher ] && source $HOME/.dlauncher
+            ${WD}/dlauncher.bin ${DLAUNCHER_OPT} &
             _PID=$!
             echo $_PID > $LOCK_DIR/pid
             trap '{ rm -rf $LOCK_DIR; }' 0
