@@ -29,6 +29,7 @@ Most of keybindings are the same as in dmenu, excepting some new:
  Mod1 + Tab: switch between available plugins
  Mod1 + a: same as Up
  Mod1 + d: same as Down
+ Mod1 + r: same as Return. This allows one-hand operating
  
 It's easy to change them in the source code.
 
