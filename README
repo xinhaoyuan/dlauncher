@@ -23,7 +23,7 @@ Feel free to hack it.
 
 Keybindings
 
-Most of keybindings are the same as in dmenu, except some new:
+Most of keybindings are the same as in dmenu, excepting some new:
 
  Mod1 + Tab: switch between available plugins
  Mod1 + a: same as Up
