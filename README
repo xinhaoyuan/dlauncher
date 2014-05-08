@@ -21,4 +21,17 @@ TODO:
 
 Feel free to hack it.
 
-Check the simple Makefile for how to build/install it.
+Keybindings
+
+Most of keybindings are the same as in dmenu, except some new:
+
+ Mod1 + Tab: switch between available plugins
+ Mod1 + a: same as Up
+ Mod1 + d: same as Down
+ 
+It's easy to change them in the source code.
+
+Build & Install
+
+DLauncher uses CMake to compile the project.
+Makefile provides shortcuts for compiling/installing.
