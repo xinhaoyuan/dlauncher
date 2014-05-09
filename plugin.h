@@ -17,10 +17,11 @@ extern "C" {
         unsigned int item_count;
         unsigned int item_default_sel;
 
-        int (*update)   (dl_plugin_t self, const char *input);
-        int (*get_desc) (dl_plugin_t self, unsigned int index, const char **output_ptr);
-        int (*get_text) (dl_plugin_t self, unsigned int index, const char **output_ptr);
-        int (*open)     (dl_plugin_t self, unsigned int index);
+        void (*init)     (dl_plugin_t self);
+        int  (*update)   (dl_plugin_t self, const char *input);
+        int  (*get_desc) (dl_plugin_t self, unsigned int index, const char **output_ptr);
+        int  (*get_text) (dl_plugin_t self, unsigned int index, const char **output_ptr);
+        int  (*open)     (dl_plugin_t self, unsigned int index);
     } dl_plugin_s;
 
     void register_plugin(dl_plugin_t plugin);

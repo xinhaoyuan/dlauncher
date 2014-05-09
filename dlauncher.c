@@ -56,6 +56,7 @@ static char       *hist_file_path;
        int         hist_count;
        int         hist_index;
 
+static void hist_plugin_init(dl_plugin_t self);
 static int hist_plugin_update(dl_plugin_t self, const char *input);
 static int hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr);
@@ -65,6 +66,7 @@ static dl_plugin_s hist_plugin = {
     .priv = NULL,
     .name = "hist",
     .priority = 100,
+    .init   = &hist_plugin_init,
     .update = &hist_plugin_update,
     .get_desc = &hist_plugin_get_desc,
     .get_text = &hist_plugin_get_text,
@@ -153,13 +155,16 @@ main(int argc, char *argv[]) {
     normcol = initcolor(dc, normfgcolor, normbgcolor);
 	selcol = initcolor(dc, selfgcolor, selbgcolor);
 
-    hist_init();
     plugin_entry[0] = &hist_plugin;
     
     setup();
 
     signal(SIGCHLD, SIG_IGN);
     signal(SIGUSR1, signal_show);
+
+    for (i = 0; i < plugin_count; ++ i) {
+        plugin_entry[i]->init(plugin_entry[i]);
+    }
 
 	run();
 
@@ -577,7 +582,7 @@ paste(void) {
 }
 
 void
-hist_init(void) {
+hist_plugin_init(dl_plugin_t self) {
     hist_index = -1;
     hist_count = 0;
     hist_file = NULL;

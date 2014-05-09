@@ -16,6 +16,8 @@
 
 using namespace std;
 
+static void _init(dl_plugin_t self) { }
+
 static int _update(dl_plugin_t self, const char *input) {
     if (strchr(input, '/') == NULL &&
         strchr(input, ' ') == NULL) {
@@ -53,12 +55,13 @@ static int _open(dl_plugin_t self, unsigned int index) {
 
 static dl_plugin_s _self;
 
-static __attribute__((constructor)) void _init(void) {
+static __attribute__((constructor)) void _register(void) {
     _self.priv       = new string();
-    _self.name       = "shell";
+    _self.name       = "sh";
     _self.priority   = -10;
     _self.item_count = 0;
     _self.item_default_sel = 0;
+    _self.init       = &_init;
     _self.update     = &_update;
     _self.get_desc   = &_get_desc;
     _self.get_text   = &_get_text;
