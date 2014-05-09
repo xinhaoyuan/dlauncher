@@ -1,0 +1,5 @@
+# an example of $HOME/.dlauncher
+
+export DLAUNCHER_COMPLETION_SERVER=$HOME/dlauncher/zsh_completion/completion-server.zsh
+export DLAUNCHER_COMPLETION_BASEDIR=/tmp/dlauncher_zsh_completion-$USER
+DLAUNCHER_OPT="-fn Monospace-12"

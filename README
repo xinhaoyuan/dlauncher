@@ -12,7 +12,7 @@ Plugins:
  - ssh: open ssh terminal to host alias
  - dir: open terminal in a given directory
  - shell: run input in a shell 
- - zsh: complete line using zsh engine
+ - zsh: complete line using zsh engine (check dot_dlauncher_example to see how to activate this)
 
 TODO:
 
