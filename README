@@ -12,13 +12,13 @@ Plugins:
  - ssh: open ssh terminal to host alias
  - dir: open terminal in a given directory
  - shell: run input in a shell 
+ - zsh: complete line using zsh engine
 
 TODO:
 
  - more plugins
    - calculator plugin
    - url plugin
-   - kill pid plugin
 
 Feel free to hack it.
 
