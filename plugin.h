@@ -1,8 +1,6 @@
 #ifndef __DLAUNCHER_PLUGIN_H__
 #define __DLAUNCHER_PLUGIN_H__
 
-#include "item.h"
-
 #if __cplusplus
 extern "C" {
 #endif
