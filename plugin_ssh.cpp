@@ -1,6 +1,7 @@
 #include "plugin.h"
 #include "dirlist.hpp"
 #include "exec.h"
+#include "defaults.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -121,11 +122,11 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, unsigned int index) {
+static int _open(dl_plugin_t self, unsigned int index, int mode) {
     priv_s *p = (priv_s *)self->priv;
     vector<string> args;
     // use urxvt here
-    args.push_back("urxvt");
+    args.push_back(DEFAULT_TERM);
     args.push_back("-e");
     args.push_back("ssh");
     args.push_back(p->candidates[index]);

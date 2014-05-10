@@ -1,5 +1,6 @@
 #include "plugin.h"
 #include "exec.h"
+#include "defaults.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -183,8 +184,13 @@ _get_text(dl_plugin_t self, unsigned int index, const char **output_ptr) {
 }
 
 static int
-_open(dl_plugin_t self, unsigned int index) {
+_open(dl_plugin_t self, unsigned int index, int mode) {
     vector<string> args;
+    if (mode) {
+        args.push_back(DEFAULT_TERM);
+        args.push_back("-e");
+    }
+
     args.push_back("zsh");
     args.push_back("-c");
     args.push_back(text[filter[index]]);

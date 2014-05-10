@@ -19,8 +19,8 @@
 #include "draw.h"
 #include "hist.h"
 #include "plugin.h"
+#include "defaults.h"
 
-#define DEFAULT_FONT "Monospace-11"
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
                              * MAX(0, MIN((y)+(h),(r).y_org+(r).height) - MAX((y),(r).y_org)))
 #define MIN(a,b)              ((a) < (b) ? (a) : (b))
@@ -60,7 +60,7 @@ static void hist_plugin_init(dl_plugin_t self);
 static int hist_plugin_update(dl_plugin_t self, const char *input);
 static int hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr);
-static int hist_plugin_open(dl_plugin_t self, unsigned int index);
+static int hist_plugin_open(dl_plugin_t self, unsigned int index, int mode);
 
 static dl_plugin_s hist_plugin = {
     .priv = NULL,
@@ -363,7 +363,8 @@ keypress(XKeyEvent *ev) {
 		case XK_l: ksym = XK_Down;  break;
 		case XK_j: ksym = XK_Next;  break;
 		case XK_k: ksym = XK_Prior; break;
-        case XK_r: ksym = XK_Return; break;
+        case XK_r:
+        case XK_R: ksym = XK_Return; break;
         case XK_Tab:  plugin_cycle_next(); return;
         case XK_Up:   hist_show_prev(); return;
         case XK_Down: hist_show_next(); return;
@@ -446,12 +447,11 @@ keypress(XKeyEvent *ev) {
 	case XK_Return:
 	case XK_KP_Enter:
 		if (cur_plugin >= 0 &&
-            sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count &&
-            !(ev->state & ShiftMask)) {
+            sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count) {
             const char *_text;
             plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
             hist_add(plugin_entry[cur_plugin]->name, _text);
-            plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], sel_index);
+            plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], sel_index, !!(ev->state & ShiftMask));
         }
         hide();
         return;
@@ -750,7 +750,7 @@ hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_p
 }
 
 int
-hist_plugin_open(dl_plugin_t self, unsigned int index) {
+hist_plugin_open(dl_plugin_t self, unsigned int index, int mode) {
     if (index >= self->item_count) {
         fprintf(stderr, "open out of bound\n");
         return 1;
@@ -762,7 +762,7 @@ hist_plugin_open(dl_plugin_t self, unsigned int index) {
     {
         const char *_text = strchr(hist_line_matched[index], ':') + 1;
         hist_add(plugin_entry[cur_plugin]->name, _text);
-        plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], 0);
+        plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], 0, mode);
     }
 }
 

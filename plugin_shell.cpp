@@ -1,6 +1,7 @@
 #include "plugin.h"
 #include "dirlist.hpp"
 #include "exec.h"
+#include "defaults.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -43,9 +44,15 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, unsigned int index) {
+static int _open(dl_plugin_t self, unsigned int index, int mode) {
     string *p = (string *)self->priv;
     vector<string> args;
+    
+    if (mode) {
+        args.push_back(DEFAULT_TERM);
+        args.push_back("-e");
+    }
+    
     args.push_back("sh");
     args.push_back("-c");
     args.push_back(*p);

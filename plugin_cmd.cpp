@@ -1,3 +1,4 @@
+#include "defaults.h"
 #include "plugin.h"
 #include "dirlist.hpp"
 #include "exec.h"
@@ -126,10 +127,14 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, unsigned int index) {
+static int _open(dl_plugin_t self, unsigned int index, int mode) {
     priv_s *p = (priv_s *)self->priv;
     vector<string> args;
-    args.push_back(p->candidates[index]);
+    if (mode) {
+        args.push_back(DEFAULT_TERM);
+        args.push_back("-e");
+        args.push_back(p->candidates[index]);
+    } else args.push_back(p->candidates[index]);
     execute(args);
     return 0;
 }

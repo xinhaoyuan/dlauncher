@@ -3,6 +3,7 @@
 #include "plugin.h"
 #include "dirlist.hpp"
 #include "exec.h"
+#include "defaults.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -123,7 +124,7 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, unsigned int index) {
+static int _open(dl_plugin_t self, unsigned int index, int mode) {
     priv_s *p = (priv_s *)self->priv;
     vector<string> args;
     const char *path = p->candidates[index].c_str();
@@ -132,9 +133,8 @@ static int _open(dl_plugin_t self, unsigned int index) {
         asprintf(&r, "%s/%s", getenv("HOME"), path);
         path = r;
     } else path = strdup(path);
-    
-    args.push_back("urxvt");
-    args.push_back("-cd");
+
+    args.push_back(DEFAULT_FILE_MANAGER);
     args.push_back(path);
 
     free((void *)path);
