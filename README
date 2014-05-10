@@ -16,6 +16,7 @@ Plugins:
 
 TODO:
 
+ - timed updating mechanism
  - more plugins
    - calculator plugin
    - url plugin

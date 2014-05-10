@@ -1,5 +1,8 @@
 # an example of $HOME/.dlauncher
 
+# set these two variable properly to enable zsh plugin
 export DLAUNCHER_COMPLETION_SERVER=$HOME/dlauncher/zsh_completion/completion-server.zsh
 export DLAUNCHER_COMPLETION_BASEDIR=/tmp/dlauncher_zsh_completion-$USER
+
+# options passed into dlauncher.bin. Refer to dmenu options
 DLAUNCHER_OPT="-fn Monospace-12"
