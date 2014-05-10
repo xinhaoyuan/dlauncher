@@ -1,3 +1,5 @@
+# Intro
+
 DLauncher is a modified dmenu that provide flexible launcher
 functions, including but not limited to:
 
@@ -6,7 +8,7 @@ functions, including but not limited to:
  - History
  - Persistent daemon (wake up by signal)
 
-Plugins:
+# Plugins:
 
  - cmd: open executable in $PATH
  - ssh: open ssh terminal to host alias
@@ -14,7 +16,7 @@ Plugins:
  - shell: run input in a shell 
  - zsh: complete line using zsh engine (check dot_dlauncher_example to see how to activate this)
 
-TODO:
+# TODO:
 
  - timed updating mechanism
  - more plugins
@@ -23,7 +25,7 @@ TODO:
 
 Feel free to hack it.
 
-Keybindings
+# Keybindings
 
 Most of keybindings are the same as in dmenu, excepting some new:
 
@@ -34,7 +36,16 @@ Most of keybindings are the same as in dmenu, excepting some new:
  
 It's easy to change them in the source code.
 
-Build & Install
+# Build & Install
 
 DLauncher uses CMake to compile the project.
 Makefile provides shortcuts for compiling/installing.
+
+# Usage
+
+dot_dlauncher_example is a sample dlauncher configuration file (~/.dlauncher)
+
+dlauncher start - start the dlauncher deamon
+dlauncher exit  - kill the dlauncher deamon
+dlauncher open  - activate the dlauncher ui
+
