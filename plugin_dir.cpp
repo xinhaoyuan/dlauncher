@@ -1,4 +1,6 @@
+#ifdef __linux__
 #define _XOPEN_SOURCE 700
+#endif
 
 #include "plugin.h"
 #include "dirlist.hpp"

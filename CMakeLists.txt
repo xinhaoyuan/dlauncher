@@ -15,6 +15,10 @@ INCLUDE_DIRECTORIES(${XLIB_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${XINERAMA_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${XFT_INCLUDE_DIRS})
 
+LINK_DIRECTORIES(${XLIB_LIBRARY_DIRS})
+LINK_DIRECTORIES(${XINERAMA_LIBRARY_DIRS})
+LINK_DIRECTORIES(${XFT_LIBRARY_DIRS})
+
 ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c dirlist.cpp exec.cpp
   plugin_cmd.cpp plugin_ssh.cpp plugin_dir.cpp plugin_shell.cpp plugin_zsh.cpp)
 
