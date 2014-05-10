@@ -58,6 +58,7 @@ _update_cache(const char *input) {
     // fprintf(stderr, "connecting to %s\n", sa.sun_path);
 
     if (connect(s, (struct sockaddr *)&sa, len) == -1) {
+        close(s);
         _start_server();
         return;
     }
