@@ -16,6 +16,8 @@ functions, including but not limited to:
  - shell: run input in a shell 
  - zsh: complete line using zsh engine (check dot_dlauncher_example to see how to activate this)
 
+FYI: zsh plugin does not work on FreeBSD due to a bug on ``zpty''
+
 # TODO
 
  - timed updating mechanism
@@ -48,4 +50,3 @@ dot_dlauncher_example is a sample dlauncher configuration file (~/.dlauncher)
 dlauncher start - start the dlauncher deamon
 dlauncher exit  - kill the dlauncher deamon
 dlauncher open  - activate the dlauncher ui
-

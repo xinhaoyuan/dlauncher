@@ -67,11 +67,12 @@ setopt noglob
 print "autosuggestion server started, pid: $$" >&2
 
 # Start an interactive zsh connected to a zpty
-zpty z ZLE_DISABLE_AUTOSUGGEST=1 zsh -i
+zpty z ZLE_DISABLE_AUTOSUGGEST=1 zsh -i || exit 1
 print 'interactive shell started'
 # Source the init script
-zpty -w z " setopt HIST_IGNORE_SPACE"
-zpty -w z " source '${0:a:h}/completion-server-init.zsh'"
+# 2 spaces for skip the init process if there is no .zshrc
+zpty -w z "  setopt HIST_IGNORE_SPACE"
+zpty -w z "  source '${0:a:h}/completion-server-init.zsh'"
 
 # wait for ok from shell
 read-to-null &> /dev/null
