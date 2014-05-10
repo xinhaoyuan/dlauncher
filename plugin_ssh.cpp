@@ -1,3 +1,7 @@
+#ifdef __FreeBSD__
+#define _WITH_GETLINE
+#endif
+
 #include "plugin.h"
 #include "dirlist.hpp"
 #include "exec.h"

@@ -10,7 +10,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#ifdef __linux__
 #include <sys/epoll.h>
+#endif
 #include <assert.h>
 
 #include <sstream>
@@ -59,6 +61,7 @@ fork_and_exec(char **argv, int fd_in, int fd_out, int fd_err) {
     }
 }
 
+#ifdef __linux__
 int
 execute_and_gather(char **argv, const std::string &input, std::string &output) {
     int in_pfd[2];
@@ -190,6 +193,7 @@ execute_and_gather(const std::vector<std::string> &args, const std::string &inpu
     delete[] argv;
     return r;
 }
+#endif
 
 int
 execute(const std::vector<std::string> &args) {

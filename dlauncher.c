@@ -1,6 +1,11 @@
 /* See LICENSE file for copyright and license details. */
+#ifdef __linux__
 #define _XOPEN_SOURCE 700
 #define _GNU_SOURCE
+#endif
+#ifdef __FreeBSD__
+#define _WITH_GETLINE
+#endif
 
 #include <ctype.h>
 #include <stdio.h>
@@ -764,6 +769,7 @@ hist_plugin_open(dl_plugin_t self, unsigned int index, int mode) {
         hist_add(plugin_entry[cur_plugin]->name, _text);
         plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], 0, mode);
     }
+	return 0;
 }
 
 
