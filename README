@@ -8,7 +8,7 @@ functions, including but not limited to:
  - History
  - Persistent daemon (wake up by signal)
 
-# Plugins:
+# Plugins
 
  - cmd: open executable in $PATH
  - ssh: open ssh terminal to host alias
@@ -16,7 +16,7 @@ functions, including but not limited to:
  - shell: run input in a shell 
  - zsh: complete line using zsh engine (check dot_dlauncher_example to see how to activate this)
 
-# TODO:
+# TODO
 
  - timed updating mechanism
  - more plugins
