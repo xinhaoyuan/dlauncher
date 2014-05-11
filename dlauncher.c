@@ -371,7 +371,9 @@ keypress(XKeyEvent *ev) {
         case XK_r:
         case XK_R: ksym = XK_Return; break;
         case XK_Tab:  plugin_cycle_next(); return;
+        case XK_w:
         case XK_Up:   hist_show_prev(); return;
+        case XK_s:
         case XK_Down: hist_show_next(); return;
 
 		default:
