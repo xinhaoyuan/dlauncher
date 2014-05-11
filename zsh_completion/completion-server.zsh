@@ -7,7 +7,7 @@ read-to-null() {
 	while zpty -r z chunk; do
 		[[ $chunk == *$'\0'* ]] && break
 		[[ $chunk != $'\1'* ]] && continue # ignore what doesnt start with '1'
-		print -n - ${chunk:1}
+		print -r -n - ${chunk:1}
 	done
 }
 
@@ -21,7 +21,7 @@ handle-request() {
 	local connection=$1 current line
 	integer read_something=0
 	print "request received from fd $connection"
-	while IFS= read -u $connection prefix &> /dev/null; do
+	while IFS= read -r -u $connection prefix &> /dev/null; do
 		read_something=1
 		# send the prefix to be completed followed by a TAB to force
 		# completion
@@ -30,7 +30,9 @@ handle-request() {
 		zpty -r z chunk &> /dev/null # read empty line before completions
 		current=''
 		read-to-null | while IFS= read -r line; do
-            if (( $#line )) print -u $connection - ${line:0:-1}
+            if (( $#line )); then
+                print -r -u $connection - ${line:0:-1}
+            fi
 		done
         # empty line to end
 		print -n -u $connection $'\0'

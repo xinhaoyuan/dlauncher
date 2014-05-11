@@ -87,7 +87,7 @@ compadd () {
 	# extract prefixes and suffixes from compadd call. we can't do zsh's cool
 	# -r remove-func magic, but it's better than nothing.
 	typeset -A apre hpre hsuf asuf
-	zparseopts -E P:=apre p:=hpre S:=asuf s:=hsuf
+	zparseopts -E i:=ipre I:=isuf P:=apre p:=hpre S:=asuf s:=hsuf
 
 	# append / to directories? we are only emulating -f in a half-assed way
 	# here, but it's better than nothing.
@@ -111,8 +111,9 @@ compadd () {
 		(( dirsuf )) && [[ -d $__hits[$i] ]] && dsuf=/ || dsuf=
 		# description to be displayed afterwards
 		# (( $#__dscr >= $i )) && dscr=" -- ${${__dscr[$i]}##$__hits[$i] #}" || dscr=
-
-		print - $'\1'$IPREFIX$apre$hpre$__hits[$i]$dsuf$hsuf$asuf$dscr
+        
+        local item="$IPREFIX$ipre$apre$hpre$__hits[$i]$dsuf$hsuf$asuf$dscr$isuf"
+		print -r $'\1'"$item"
 
 	done
 

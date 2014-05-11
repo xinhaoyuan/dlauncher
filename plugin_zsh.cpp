@@ -38,6 +38,32 @@ _start_server(void) {
     execute(cmd);
 }
 
+
+static const char *
+last_word(const char *line) {
+    const char *result = line;
+    char match = 0;
+    for (const char *c = line; *c; ++ c) {
+        // XXX this is hackish, may encounter unexpected effect
+        if (*c == '\\' && c[1]) ++ c;
+        else if (*c == ' ' && match == 0) result = c + 1;
+        else if (*c == '"') {
+            if (match == 0) {
+                result = c + 1;
+                match = '"';
+            } else if (match == '"')
+                match = 0;
+        } else if (*c == '\'') {
+            if (match == 0) {
+                result = c + 1;
+                match = '\'';
+            } else if (match == '\'')
+                match = 0;
+        }
+    }
+    return result;
+}
+
 static void
 _update_cache(const char *input) {
     cache_input = input;
@@ -107,21 +133,18 @@ _update_cache(const char *input) {
     close(s);
     
     string line;
+    int lws = last_word(input) - input;
+    
     while (getline(is, line)) {
         int i = line.length();
         while (i > 0 && (line[i - 1] == '\n' || line[i - 1] == '\r')) -- i;
         line = string(line, 0, i);
         if (line.length() == 0) continue;
         
-        desc.push_back(line);
-
-        for (i = strlen(input) - 1; i >= 0; -- i) {
-            if (input[i] == ' ') break;
-        }
-        ++ i;
-
         ostringstream os;
-        os << string(input, i) << line;
+        os << string(input, lws) << line;
+
+        desc.push_back(line);
         text.push_back(os.str());
         filter.push_back(filter.size());
     }
@@ -156,7 +179,7 @@ _update(dl_plugin_t self, const char *input) {
 
     if (cache_input.length() > 0 &&
         strncmp(input, cache_input.c_str(), cache_input.length() == 0) &&
-        strchr(input + cache_input.length(), ' ') == NULL) {
+        last_word(input) - input < cache_input.length()) {
 
         filter.clear();
         for (int i = 0; i < text.size(); ++ i) {
