@@ -62,13 +62,27 @@ update_cache(void) {
 
                 // get the trim part of host alias
                 int s = 4;
-                while (line[s] == '\t' || line[s] == ' ') ++ s;
-                if (line[s] == 0) continue;
-                int e = s;
-                while (line[e] != '\t' && line[e] != ' ' && line[e] != '\n' && line[e] != 0) ++ e;
-                line[e] = 0;
-                
-                cache.push_back(line + s);
+                int skip;
+                while (true) {
+                    skip = 0;
+                    while (line[s] == '\t' || line[s] == ' ') ++ s;
+                    int e = s;
+                    while (line[e] != '\t' && line[e] != ' ' && line[e] != '\n' && line[e] != 0) {
+                        // keep only exact pattern
+                        if (line[e] == '!' || line[e] == '?' || line[e] == '*')
+                            skip = 1;
+                        ++ e;
+                    }
+                    char ec = line[e];
+
+                    if (!skip && e != s) {
+                        line[e] = 0;
+                        cache.push_back(line + s);
+                    }
+                    
+                    if (ec == 0 || ec == '\n') break;
+                    s = e + 1;
+                }
             }
         }
         if (line) free(line);

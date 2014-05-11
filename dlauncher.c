@@ -253,9 +253,10 @@ drawmenu(void) {
 	if((curpos = textnw(dc, text, cursor) + dc->h/2 - 2) < dc->w)
 		drawrect(dc, curpos, 2, 1, dc->h - 4, True, normcol->FG);
 
-	if(lines > 0) {
+	if(lines > 0 && cur_plugin >= 0) {
 		/* draw vertical list */
-		dc->w = mw - dc->x;
+        dc->x = 0;
+		dc->w = mw;
 		for(index = cur_pindex; index != next_pindex; ++ index) {
 			dc->y += dc->h;
             const char *_text;
@@ -263,8 +264,7 @@ drawmenu(void) {
 			drawtext(dc, _text,
                      (index == sel_index) ? selcol : normcol);
 		}
-	}
-	else if(cur_plugin >= 0) {
+	} else if(cur_plugin >= 0) {
 		/* draw horizontal list */
 		dc->x += inputw;
 		dc->w = textw(dc, "<");

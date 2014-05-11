@@ -64,6 +64,7 @@ static int _update(dl_plugin_t self, const char *input) {
     vector<string> comp;
 
     int r = dirlist(base_dir[0] ? base_dir : "/", comp, "/tmp/dircache_");
+    struct stat statbuf;
     if (r == 0)
     {
         for (int i = 0; i < comp.size(); ++ i) {
@@ -72,7 +73,6 @@ static int _update(dl_plugin_t self, const char *input) {
             if (comp[i].c_str()[0] == '.') continue;
             oss << base_dir << "/" << comp[i];
             string filename = oss.str();
-            struct stat statbuf;
             if (stat(filename.c_str(), &statbuf)) continue;
             if (!S_ISDIR(statbuf.st_mode)) continue;
             // only directory
@@ -84,7 +84,7 @@ static int _update(dl_plugin_t self, const char *input) {
     }
 
     free(base_dir);
-
+    
     vector<string> comp_prefix, comp_contain;
 
     if (strncmp(input, home, home_len) == 0 && home_len < strlen(input))
