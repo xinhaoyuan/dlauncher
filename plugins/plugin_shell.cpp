@@ -48,6 +48,8 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
 static int _open(dl_plugin_t self, int index, const char *input, int mode) {
     string *p = (string *)self->priv;
     vector<string> args;
+
+    if (index == 0) input = p->c_str();
     
     if (mode) {
         args.push_back(DEFAULT_TERM);
@@ -56,7 +58,8 @@ static int _open(dl_plugin_t self, int index, const char *input, int mode) {
     
     args.push_back("sh");
     args.push_back("-c");
-    args.push_back(*p);
+    args.push_back(input);
+    
     execute(args);
     return 0;
 }
