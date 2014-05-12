@@ -514,17 +514,17 @@ keypress(XKeyEvent *ev) {
         }
 		break;
 	case XK_Tab:
-		if(cur_plugin < 0 ||
-           sel_index < 0 ||
-           sel_index >= plugin_entry[cur_plugin]->item_count)
-			return;
+		if (cur_plugin < 0 || plugin_entry[cur_plugin]->item_count == 0)
+            return;
+        if (sel_index < 0 ||
+            sel_index >= plugin_entry[cur_plugin]->item_count)
+			sel_index = 0;
         
         const char *_text;
         plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
 		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
-        update(1);
-        return;
+        break;
 	}
 	drawmenu();
 }
