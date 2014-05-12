@@ -1,6 +1,5 @@
 #include "plugin.h"
 #include "socket_pl.h"
-#include "exec.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -11,12 +10,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include <vector>
-#include <string>
-#include <sstream>
-
-using namespace std;
-
 typedef struct sp_priv_s *sp_priv_t;
 typedef struct sp_priv_s {
     int    conn;
@@ -25,9 +18,12 @@ typedef struct sp_priv_s {
     char  *socket_path;
     char  *opt;
 
-    vector<string> desc;
-    vector<string> text;
-    vector<int>    filter;
+    char  *recv_buf;
+    int    item_count;
+    char **desc;
+    char **text;
+    int    filter_count;
+    int   *filter;
 } sp_priv_s;
 
 static void _init     (dl_plugin_t self);
@@ -40,7 +36,7 @@ static char *_get_opt(const char *opt, const char *name) {
     int name_len = strlen(name);
     const char *start = opt;
     
-    while (true) {
+    while (1) {
         if (!strncmp(start, name, name_len) && start[name_len] == '=') break;
         while (*start && *start != ':') {
             if (*start == '\\' && start[1] == ':') ++ start;
@@ -105,6 +101,8 @@ _connect(sp_priv_t p) {
 
     struct sockaddr_un sa;
     int len;
+    char *rcmd;
+    time_t ts;
     
     if ((p->conn = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         goto err;
@@ -122,21 +120,17 @@ _connect(sp_priv_t p) {
     return p->conn;
     
   err:
-    char *rcmd = _get_opt(p->opt, "RESTART_CMD");
-    time_t ts; time(&ts);
+    rcmd = _get_opt(p->opt, "RESTART_CMD");
+    time(&ts);
     if (rcmd &&
         (p->ts_init_flag == 0 ||
          difftime(ts, p->last_conn_timestamp) > 3)) {
         p->ts_init_flag = 1;
         p->last_conn_timestamp = ts;
-        fprintf(stderr, "restart using %s\n", rcmd);
-        
-        vector<string> cmd;
-        cmd.push_back("sh");
-        cmd.push_back("-c");
-        cmd.push_back(rcmd);
-        execute(cmd);
-        
+        // fprintf(stderr, "restart using %s\n", rcmd);
+
+        char *cmd[] = { "sh", "-c", rcmd, NULL };
+        fork_and_exec(cmd, -1, -1, STDERR_FILENO);
         free(rcmd);
     }
     return p->conn = -1;
@@ -160,7 +154,9 @@ _disconnect(sp_priv_t p) {
 
 static void
 _update_cache(sp_priv_t p, const char *input) {
-#define CLEAR do { p->desc.clear(); p->text.clear(); p->filter.clear(); } while (0)
+#define CLEAR do { free(p->recv_buf); free(p->desc); free(p->text); free(p->filter); \
+        p->recv_buf = NULL; p->desc = NULL; p->text = NULL; p->filter = NULL; \
+        p->item_count = p->filter_count = 0; } while (0)
     
     int s = _connect(p);
     if (s < 0) {
@@ -201,58 +197,105 @@ _update_cache(sp_priv_t p, const char *input) {
     // fprintf(stderr, "sent\n");
 
     // recv output
-    stringstream is;
+    unsigned int _recv_buf_size = 1024;
+    unsigned int _recv_buf_ptr  = 0;
+    char *_recv_buf = (char *)malloc(sizeof(char) * _recv_buf_size);
+
+    if (_recv_buf == NULL) {
+        CLEAR;
+        _disconnect(p);
+    }
+
     char buf[1024];
-    while (true) {
+    while (1) {
         ssize_t r = recv(s, buf, sizeof buf, 0);
         // fprintf(stderr, "recv %d [%s]\n", r, string(buf, r).c_str());
         if (r < 0) {
             CLEAR;
             _disconnect(p);
+            free(_recv_buf);
             return;
         } else if (r == 0)
             break;
+
+        while (_recv_buf_size < _recv_buf_ptr + r) {
+            _recv_buf = (char *)realloc(_recv_buf, _recv_buf_size << 1);
+            if (_recv_buf == NULL) {
+                CLEAR;
+                _disconnect(p);
+                return;
+            } else _recv_buf_size <<= 1;
+        }
+
+        memcpy(_recv_buf + _recv_buf_ptr, buf, r);
+        _recv_buf_ptr += r;
         
-        if (buf[r - 1] == '\0') {
-            is.write(buf, r - 1); break;
-        } else is.write(buf, r);
+        if (buf[r - 1] == '\0') break;
     }
 
     // fprintf(stderr, "recv\n");
+
+    char *line_start = _recv_buf;
+    char *line_end = line_start;
     
-    string line;
-    int pos = -1;
-    string _desc;
-    while (getline(is, line)) {
-        int i = line.length();
-        while (i > 0 && (line[i - 1] == '\n' || line[i - 1] == '\r')) -- i;
-        line = string(line, 0, i);
-        if (line.length() == 0) continue;
+    int  pos = -1;
+    char line_end_c = -1;
+    for (line_start = line_end = _recv_buf; line_end_c; line_start = (++ line_end)) {
+        // find current line
+        while (*line_end && *line_end != '\n') ++ line_end;
+        line_end_c = *line_end;
+        *line_end = 0;
+        if (line_start == line_end) continue;
 
         if (pos == -1) {
-            if (line == "filter") {
-                p->filter.clear();
-                for (int i = 0; i < p->text.size(); ++ i) {
-                    if (!strncmp(p->text[i].c_str(), input, strlen(input)))
-                        p->filter.push_back(i);
+            if (!strcmp(line_start, "filter")) {
+                // reuse the old candidates
+                int i, input_len = strlen(input);
+                p->filter_count = 0;
+                for (i = 0; i < p->item_count; ++ i) {
+                    if (!strncmp(p->text[i], input, input_len))
+                        p->filter[p->filter_count ++] = i;
                 }
-                break;
-            } else if (line == "clear") {
+                free(_recv_buf);
+                return;
+            } else if (!strcmp(line_start, "clear")) {
                 CLEAR;
+                // rebuild the candidates
                 pos = 0;
-            } else break;
+            } else {
+                CLEAR;
+                free(_recv_buf);
+                return;
+            }
         } else if (pos == 0) {
-            _desc = line;
-            pos   = 1;
+            pos = 1;
         } else {
-            p->desc.push_back(_desc);
-            p->text.push_back(line);
-            p->filter.push_back(p->filter.size());
-            pos  = 0;
+            ++ p->item_count;
+            pos = 0;
         }
     }
-    
-    return;
+
+    p->desc   = (char **)malloc(sizeof(char *) * p->item_count);
+    p->text   = (char **)malloc(sizeof(char *) * p->item_count);
+    p->filter = (int *)malloc(sizeof(int) * p->item_count);
+
+    if (!p->desc || !p->text || !p->filter) {
+        CLEAR;
+        _disconnect(p);
+        free(_recv_buf);
+        return;
+    }
+
+    int i;
+    char *ptr = _recv_buf; ptr += strlen(ptr) + 1; /* skip header */
+    for (i = 0; i < p->item_count; ++ i) {
+        p->desc[i] = ptr; ptr += strlen(ptr) + 1;
+        p->text[i] = ptr; ptr += strlen(ptr) + 1;
+        p->filter[i] = i;
+    }
+
+    p->recv_buf = _recv_buf;
+    p->filter_count = p->item_count;
 #undef CLEAR
 }
 
@@ -296,7 +339,7 @@ int
 _update(dl_plugin_t self, const char *input) {
     sp_priv_t p = (sp_priv_t)self->priv;
     _update_cache(p, input);
-    self->item_count = p->filter.size();
+    self->item_count = p->filter_count;
     self->item_default_sel = -1;
     return 0;
 }
@@ -304,21 +347,21 @@ _update(dl_plugin_t self, const char *input) {
 int
 _get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr) {
     sp_priv_t p = (sp_priv_t)self->priv;
-    *output_ptr = p->desc[p->filter[index]].c_str();
+    *output_ptr = p->desc[p->filter[index]];
     return 0;
 }
 
 int
 _get_text(dl_plugin_t self, unsigned int index, const char **output_ptr) {
     sp_priv_t p = (sp_priv_t)self->priv;
-    *output_ptr = p->text[p->filter[index]].c_str();
+    *output_ptr = p->text[p->filter[index]];
     return 0;
 }
 
 int
 _open(dl_plugin_t self, int index, const char *input, int mode) {
     sp_priv_t p = (sp_priv_t)self->priv;
-    if (index >= 0 && index < p->filter.size())
-        _send_cmd(p, p->text[p->filter[index]].c_str(), mode);
+    if (index >= 0 && index < p->filter_count)
+        _send_cmd(p, p->text[p->filter[index]], mode);
     else _send_cmd(p, input, mode);
 }

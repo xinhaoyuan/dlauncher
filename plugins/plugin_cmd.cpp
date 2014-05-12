@@ -1,8 +1,8 @@
 #include "../defaults.h"
 #include "../plugin.h"
-#include "../exec.h"
 
 #include "dirlist.hpp"
+#include "exec.hpp"
 
 #include <sys/stat.h>
 #include <unistd.h>

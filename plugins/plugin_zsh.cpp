@@ -1,5 +1,5 @@
 #include "plugin.h"
-#include "exec.h"
+#include "exec.hpp"
 #include "defaults.h"
 
 #include <stdlib.h>

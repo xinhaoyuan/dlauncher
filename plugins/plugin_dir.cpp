@@ -3,9 +3,9 @@
 #endif
 
 #include "dirlist.hpp"
+#include "exec.hpp"
 
 #include "../plugin.h"
-#include "../exec.h"
 #include "../defaults.h"
 
 #include <sys/stat.h>

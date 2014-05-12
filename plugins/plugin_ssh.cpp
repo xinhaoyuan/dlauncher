@@ -3,10 +3,10 @@
 #endif
 
 #include "../plugin.h"
-#include "../exec.h"
 #include "../defaults.h"
 
 #include "dirlist.hpp"
+#include "exec.hpp"
 
 #include <sys/stat.h>
 #include <unistd.h>

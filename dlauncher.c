@@ -364,7 +364,10 @@ keypress(XKeyEvent *ev) {
 		case XK_m: ksym = XK_Return;    break;
 		case XK_n: ksym = XK_Down;      break;
 		case XK_p: ksym = XK_Up;        break;
-
+        case XK_g: /* cancel selection */
+            sel_index = -1;
+            break;
+            
 		case XK_k: /* delete right */
 			text[cursor] = '\0';
 			break;

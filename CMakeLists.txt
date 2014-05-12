@@ -19,7 +19,8 @@ LINK_DIRECTORIES(${XLIB_LIBRARY_DIRS})
 LINK_DIRECTORIES(${XINERAMA_LIBRARY_DIRS})
 LINK_DIRECTORIES(${XFT_LIBRARY_DIRS})
 
-ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c socket_pl.cpp exec.cpp
+ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c socket_pl.c exec.c
+  plugins/exec.cpp 
   plugins/dirlist.cpp plugins/plugin_cmd.cpp plugins/plugin_ssh.cpp
   plugins/plugin_dir.cpp plugins/plugin_shell.cpp)
 
