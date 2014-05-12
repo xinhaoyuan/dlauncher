@@ -140,7 +140,13 @@ void
 _init(dl_plugin_t self) {
     sp_priv_t p = (sp_priv_t)self->priv;
     p->conn         = -1;
-    p->ts_init_flag =  0;
+    p->ts_init_flag = 0;
+    p->filter_count = 0;
+    p->item_count   = 0;
+    p->recv_buf     = NULL;
+    p->desc         = NULL;
+    p->text         = NULL;
+    p->filter       = NULL;
 
     _connect(p);
 }
