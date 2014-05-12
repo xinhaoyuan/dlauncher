@@ -1,7 +1,8 @@
-#include "plugin.h"
+#include "../plugin.h"
+#include "../exec.h"
+#include "../defaults.h"
+
 #include "dirlist.hpp"
-#include "exec.h"
-#include "defaults.h"
 
 #include <sys/stat.h>
 #include <unistd.h>

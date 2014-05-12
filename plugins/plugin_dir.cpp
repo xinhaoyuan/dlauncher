@@ -1,7 +1,12 @@
-#include "defaults.h"
-#include "plugin.h"
+#ifdef __linux__
+#define _XOPEN_SOURCE 700
+#endif
+
 #include "dirlist.hpp"
-#include "exec.h"
+
+#include "../plugin.h"
+#include "../exec.h"
+#include "../defaults.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -33,64 +38,59 @@ static vector<string> cache;
 
 static void _init(dl_plugin_t self) { }
 
-static void
-update_cache(void) {
-    time_t nts;
-    time(&nts);
-
-    if (init_flag == 1 && difftime(nts, cache_timestamp) <= 10)
-        return;
-    init_flag = 1;
-    cache_timestamp = nts;
-
-    cache.clear();
-
-    char *path = strdup(getenv("PATH"));
-    char *dir = path, *nextdir;
-    vector<string> comp;
-        
-    while (dir != NULL)
-    {
-        nextdir = strchr(dir, ':');
-        if (nextdir)
-        {
-            *(nextdir ++) = 0;
-        }
-
-        int r = dirlist(dir, comp, "/tmp/dircache_");
-        if (r == 0)
-        {
-            for (int i = 0; i < comp.size(); ++ i) {
-                ostringstream oss;
-                oss << dir << "/" << comp[i];
-                string filename = oss.str();
-                struct stat statbuf;
-                if (stat(filename.c_str(), &statbuf)) continue;
-                if (!S_ISREG(statbuf.st_mode)) continue;
-                if (!(statbuf.st_mode & 0111)) continue;
-                // a regular and executable item now
-
-                cache.push_back(comp[i]);
-            }
-        }
-
-        dir = nextdir;
-    }
-
-    free(path);
-
-    sort(cache.begin(), cache.end(), cmpString);
-    vector<string>::iterator it =
-        unique(cache.begin(), cache.end());
-    cache.resize(distance(cache.begin(), it));
-}
-
 static int _update(dl_plugin_t self, const char *input) {
-    update_cache();
     priv_s *p = (priv_s *)self->priv;
     
+    char *base_dir;
+    char *dup_input = strdup(input);
+    for (int i = strlen(dup_input) - 1; i >= 0; -- i) {
+        if (dup_input[i] == '/') break;
+        dup_input[i] = 0;
+    }
+
+    const char *home = getenv("HOME");
+    int home_len = strlen(home);
+    if (input[0] != '/') {
+        asprintf(&base_dir, "%s/%s", home, dup_input);
+        free(dup_input);
+    } else base_dir = dup_input;
+
+    int len = strlen(base_dir);
+    if (len > 0 && base_dir[len - 1] == '/') {
+        base_dir[len - 1] = 0;
+        -- len;
+    }
+
+    vector<string> cache;
+    vector<string> comp;
+
+    int r = dirlist(base_dir[0] ? base_dir : "/", comp, "/tmp/dircache_");
+    struct stat statbuf;
+    if (r == 0)
+    {
+        for (int i = 0; i < comp.size(); ++ i) {
+            ostringstream oss;
+            // skip dot files
+            if (comp[i].c_str()[0] == '.') continue;
+            oss << base_dir << "/" << comp[i];
+            string filename = oss.str();
+            if (stat(filename.c_str(), &statbuf)) continue;
+            if (!S_ISDIR(statbuf.st_mode)) continue;
+            // only directory
+            if (strncmp(filename.c_str(), home, home_len) == 0 && home_len < filename.length()) {
+                // remove $HOME prefix
+                cache.push_back(filename.c_str() + home_len + 1);
+            } else cache.push_back(filename);
+        }
+    }
+
+    free(base_dir);
+    
     vector<string> comp_prefix, comp_contain;
-        
+
+    if (strncmp(input, home, home_len) == 0 && home_len < strlen(input))
+        input += home_len + 1;
+
     for (int i = 0; i < cache.size(); ++ i) {
         size_t idx = cache[i].find(input);
         if (idx == 0)
@@ -130,11 +130,18 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
 static int _open(dl_plugin_t self, unsigned int index, int mode) {
     priv_s *p = (priv_s *)self->priv;
     vector<string> args;
-    if (mode) {
-        args.push_back(DEFAULT_TERM);
-        args.push_back("-e");
-        args.push_back(p->candidates[index]);
-    } else args.push_back(p->candidates[index]);
+    const char *path = p->candidates[index].c_str();
+    if (path[0] != '/') {
+        char *r;
+        asprintf(&r, "%s/%s", getenv("HOME"), path);
+        path = r;
+    } else path = strdup(path);
+
+    args.push_back(DEFAULT_FILE_MANAGER);
+    args.push_back(path);
+
+    free((void *)path);
+    
     execute(args);
     return 0;
 }
@@ -143,8 +150,8 @@ static dl_plugin_s _self;
 
 static __attribute__((constructor)) void _register(void) {
     _self.priv       = new priv_s();
-    _self.name       = "cmd";
-    _self.priority   = 50;
+    _self.name       = "dir";
+    _self.priority   = 40;
     _self.item_count = 0;
     _self.item_default_sel = 0;
     _self.init       = &_init;
