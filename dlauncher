@@ -1,7 +1,7 @@
 #!/bin/bash
 
 WD=`cd $(dirname $0); pwd`
-LOCK_DIR="/tmp/.dlauncher.lock"
+LOCK_DIR="/tmp/.dlauncher-$USER.lock"
 
 OP=$1; shift
 
@@ -20,7 +20,7 @@ elif [ "$OP" = "start" ]; then
         (
             cd $HOME
             [ -r $HOME/.dlauncher ] && source $HOME/.dlauncher
-            ${WD}/dlauncher.bin ${DLAUNCHER_OPT} &
+            eval "${WD}/dlauncher.bin ${DLAUNCHER_OPT} &"
             _PID=$!
             echo $_PID > $LOCK_DIR/pid
             trap '{ rm -rf $LOCK_DIR; }' 0

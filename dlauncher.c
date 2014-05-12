@@ -24,6 +24,7 @@
 #include "draw.h"
 #include "hist.h"
 #include "plugin.h"
+#include "socket_pl.h"
 #include "defaults.h"
 
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
@@ -152,8 +153,33 @@ main(int argc, char *argv[]) {
 			selbgcolor = argv[++i];
 		else if(!strcmp(argv[i], "-sf"))  /* selected foreground color */
 			selfgcolor = argv[++i];
-		else
-			usage();
+		else if (!strcmp(argv[i], "-pl"))  /* socket plugin */ {
+            char *desc = strdup(argv[++ i]);
+            /* format: name:socket_path:opt */
+            char *name = desc;
+            
+            char *socket_path = desc;
+            while (*socket_path && *socket_path != ':') ++ socket_path;
+            if (*socket_path == ':') {
+                *socket_path = 0;
+                ++ socket_path;
+            } else {
+                fprintf(stderr, "invalid arg for -pl\n");
+                usage();
+                exit(EXIT_FAILURE);
+            }
+
+            char *opt = socket_path;
+            while (*opt && *opt != ':') ++ opt;
+            if (*opt == ':') {
+                *opt = 0;
+                ++ opt;
+            }
+            
+            socket_plugin_register(name, socket_path, opt);
+            free(desc);
+        }
+        else usage();
 
 	dc = initdc();
 	initfont(dc, font ? font : DEFAULT_FONT);
@@ -959,6 +985,8 @@ hide(void) {
 void
 usage(void) {
 	fputs("usage: dlauncher [-b] [-i] [-l lines] [-fn font]\n"
-	      "                 [-nb color] [-nf color] [-sb color] [-sf color] [-v]\n", stderr);
+	      "                 [-nb color] [-nf color] [-sb color] [-sf color] [-v]\n"
+          "                 [-pl name:socket_path[:opt]]*\n"
+          , stderr);
 	exit(EXIT_FAILURE);
 }

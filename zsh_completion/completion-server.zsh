@@ -11,34 +11,85 @@ read-to-null() {
 	done
 }
 
+last-word() {
+    local input=$1
+    integer i=0
+    integer m=0
+    integer s=0
+    while [[ $i -lt ${#input} ]]; do 
+        if [[ ${input:$i:1} == '\' && $m != 2 ]]; then i=$i + 1
+        elif [[ ${input:$i:1} == '"' ]]; then
+            if [[ $m == 0 ]]; then 
+                m=1
+                s=$(( $i + 1 ))
+            elif [[ $m == 1 ]]; then
+                m=0
+            fi
+        elif [[ ${input:$i:1} == "'" ]]; then
+            if [[ $m == 0 ]]; then 
+                m=2
+                s=$(( $i + 1 ))
+            elif [[ $m == 2 ]]; then
+                m=0
+            fi
+        elif [[ ${input:$i:1} == ' ' && $m == 0 ]]; then s=$(( $i + 1 ))
+        fi
+        i=$(( $i + 1 ))
+    done
+    print $s
+}
+
 accept-connection() {
 	zsocket -a $server
 	fds[$REPLY]=1
+    cached_input[$REPLY]=$'\0'
 	print "connection accepted, fd: $REPLY" >&2
 }
 
 handle-request() {
-	local connection=$1 current line
+	local connection=$1 current line input cached
 	integer read_something=0
 	print "request received from fd $connection"
 	while IFS= read -r -u $connection prefix &> /dev/null; do
 		read_something=1
-		# send the prefix to be completed followed by a TAB to force
-		# completion
-		zpty -w -n z "$prefix"
-        zpty -w -n z $'\t'
-		zpty -r z chunk &> /dev/null # read empty line before completions
-		current=''
-		read-to-null | while IFS= read -r line; do
-            if (( $#line )); then
-                print -r -u $connection - ${line:0:-1}
+        if [[ $prefix == $'\1'* ]]; then
+            # execute the command
+            ${prefix:1} &
+        else
+		    # send the prefix to be completed followed by a TAB to force
+		    # completion
+            input=${prefix:1}
+            cached=$cached_input[$connection]
+            lw=$(last-word "$input")
+
+            if [[ "${input:0:${#cached}}" == "$cached" && $lw -le ${#cached} ]]; then
+                print -u $connection "filter"
+                print -n -u $connection $'\0'
+                break;
             fi
-		done
-        # empty line to end
-		print -n -u $connection $'\0'
-		# clear input buffer
-		zpty -w z $'\n'
-		break # handle more requests/return to zselect
+
+            print -u $connection "clear"
+            if [[ -n $input ]]; then
+
+                cached_input[$connection]=$input
+		        zpty -w -n z "$input"
+                zpty -w -n z $'\t'
+		        zpty -r z chunk &> /dev/null # read empty line before completions
+		        read-to-null | while IFS= read -r line; do
+                    if (( $#line )); then
+                        print -r -u $connection - ${line:0:-1}
+                        print -r -u $connection - "${input:0:$lw}${line:0:-1}"
+                    fi
+		        done
+                
+            fi
+
+            # empty line to end
+		    print -n -u $connection $'\0'
+		    # clear input buffer
+		    zpty -w z $'\n'
+		    break # handle more requests/return to zselect
+        fi
 	done
 	if ! (( read_something )); then
 		print "connection with fd $connection closed" >&2
@@ -111,7 +162,8 @@ print "server listening on '$socket_path'"
 
 print $$ > $pid_file
 
-typeset -A fds ready
+typeset -A fds ready cached_input
+
 fds[$server]=1
 
 while zselect -A ready ${(k)fds}; do

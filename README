@@ -4,7 +4,7 @@ DLauncher is a modified dmenu that provide flexible launcher
 functions, including but not limited to:
 
  - Dynamic content
- - Plugin
+ - Plugin (native and external)
  - History
  - Persistent daemon (wake up by signal)
 
@@ -13,8 +13,8 @@ functions, including but not limited to:
  - cmd: open executable in $PATH
  - ssh: open ssh terminal to host alias
  - dir: open terminal in a given directory
- - shell: run input in a shell 
- - zsh: complete line using zsh engine (check dot_dlauncher_example to see how to activate this)
+ - shell: run input in a shell
+ - zsh(external): complete line using zsh engine (check dot_dlauncher_example to see how to activate this)
 
 FYI: zsh plugin does not work on FreeBSD due to a bug on ``zpty''
 

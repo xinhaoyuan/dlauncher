@@ -1,8 +1,9 @@
 # an example of $HOME/.dlauncher
 
-# set these two variables properly to enable zsh plugin
-export DLAUNCHER_COMPLETION_SERVER=$HOME/dlauncher/zsh_completion/completion-server.zsh
-export DLAUNCHER_COMPLETION_BASEDIR=/tmp/dlauncher_zsh_completion-$USER
+# add zsh plugin
+ZSH_COMP_BASEDIR="/tmp/dlauncher_zsh_comp-$USER"
+# set the restart command properly
+DLAUNCHER_OPT="-pl \"zsh:${ZSH_COMP_BASEDIR}/socket:RESTART_CMD=zsh $HOME/dlauncher/zsh_completion/completion-server.zsh ${ZSH_COMP_BASEDIR}\""
 
 # options passed into dlauncher.bin. Refer to dmenu options
-DLAUNCHER_OPT="-fn Monospace-12"
+DLAUNCHER_OPT="-fn Monospace-12 ${DLAUNCHER_OPT}"
