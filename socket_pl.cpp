@@ -99,13 +99,6 @@ socket_plugin_register(const char *name, const char *socket_path, const char *op
     register_plugin(plugin);
 }
 
-void
-_init(dl_plugin_t self) {
-    sp_priv_t p = (sp_priv_t)self->priv;
-    p->conn         = 0;
-    p->ts_init_flag = 0;
-}
-
 static int
 _connect(sp_priv_t p) {
     if (p->conn >= 0) return p->conn;
@@ -147,6 +140,15 @@ _connect(sp_priv_t p) {
         free(rcmd);
     }
     return p->conn = -1;
+}
+
+void
+_init(dl_plugin_t self) {
+    sp_priv_t p = (sp_priv_t)self->priv;
+    p->conn         = -1;
+    p->ts_init_flag =  0;
+
+    _connect(p);
 }
 
 static void
@@ -217,7 +219,7 @@ _update_cache(sp_priv_t p, const char *input) {
     }
 
     // fprintf(stderr, "recv\n");
-
+    
     string line;
     int pos = -1;
     string _desc;

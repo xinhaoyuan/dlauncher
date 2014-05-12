@@ -58,19 +58,18 @@ handle-request() {
         else
 		    # send the prefix to be completed followed by a TAB to force
 		    # completion
-            input=${prefix:1}
-            cached=$cached_input[$connection]
+            input="${prefix:1}"
+            cached="$cached_input[$connection]"
             lw=$(last-word "$input")
-
-            if [[ "${input:0:${#cached}}" == "$cached" && $lw -le ${#cached} ]]; then
+            
+            if [[ -n "$input" && "${input:0:${#cached}}" == "$cached" && $lw -le ${#cached} ]]; then
                 print -u $connection "filter"
                 print -n -u $connection $'\0'
                 break;
             fi
 
             print -u $connection "clear"
-            if [[ -n $input ]]; then
-
+            if [[ -n "$input" ]]; then
                 cached_input[$connection]=$input
 		        zpty -w -n z "$input"
                 zpty -w -n z $'\t'
@@ -81,7 +80,8 @@ handle-request() {
                         print -r -u $connection - "${input:0:$lw}${line:0:-1}"
                     fi
 		        done
-                
+            else
+                cached_input[$connection]=$'\0'
             fi
 
             # empty line to end
