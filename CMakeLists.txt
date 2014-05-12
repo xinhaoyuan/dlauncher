@@ -19,9 +19,9 @@ LINK_DIRECTORIES(${XLIB_LIBRARY_DIRS})
 LINK_DIRECTORIES(${XINERAMA_LIBRARY_DIRS})
 LINK_DIRECTORIES(${XFT_LIBRARY_DIRS})
 
-ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c socket_pl.cpp
-  plugins/dirlist.cpp exec.cpp
-  plugins/plugin_cmd.cpp plugins/plugin_ssh.cpp plugins/plugin_dir.cpp plugins/plugin_shell.cpp)
+ADD_EXECUTABLE(dlauncher.bin dlauncher.c draw.c socket_pl.cpp exec.cpp
+  plugins/dirlist.cpp plugins/plugin_cmd.cpp plugins/plugin_ssh.cpp
+  plugins/plugin_dir.cpp plugins/plugin_shell.cpp)
 
 SET_PROPERTY(TARGET dlauncher.bin APPEND PROPERTY COMPILE_DEFINITIONS VERSION="${DL_VERSION}" XINERAMA)
 TARGET_LINK_LIBRARIES(dlauncher.bin ${XLIB_LIBRARIES} ${XINERAMA_LIBRARIES} ${XFT_LIBRARIES})
