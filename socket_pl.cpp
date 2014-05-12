@@ -34,7 +34,7 @@ static void _init     (dl_plugin_t self);
 static int  _update   (dl_plugin_t self, const char *input);
 static int  _get_desc (dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int  _get_text (dl_plugin_t self, unsigned int index, const char **output_ptr);
-static int  _open     (dl_plugin_t self, unsigned int index, int mode);
+static int  _open     (dl_plugin_t self, int index, const char *input, int mode);
 
 static char *_get_opt(const char *opt, const char *name) {
     int name_len = strlen(name);
@@ -171,7 +171,7 @@ _update_cache(sp_priv_t p, const char *input) {
     // fprintf(stderr, "connected\n");
 
     // send query prefix
-    if (send(s, "\0", 1, 0) != 1) {
+    if (send(s, "q", 1, 0) != 1) {
         CLEAR;
         _disconnect(p);
         return;
@@ -257,14 +257,14 @@ _update_cache(sp_priv_t p, const char *input) {
 }
 
 static void
-_send_cmd(sp_priv_t p, const char *cmd) {
+_send_cmd(sp_priv_t p, const char *cmd, int mode) {
     int s = _connect(p);
     if (s < 0) {
         return;
     }
 
     // send command prefix
-    if (send(s, "\1", 1, 0) != 1) {
+    if (send(s, mode ? "O" : "o", 1, 0) != 1) {
         _disconnect(p);
         return;
     }
@@ -297,7 +297,7 @@ _update(dl_plugin_t self, const char *input) {
     sp_priv_t p = (sp_priv_t)self->priv;
     _update_cache(p, input);
     self->item_count = p->filter.size();
-    self->item_default_sel = self->item_count > 0 ? 0 : -1;
+    self->item_default_sel = -1;
     return 0;
 }
 
@@ -316,7 +316,9 @@ _get_text(dl_plugin_t self, unsigned int index, const char **output_ptr) {
 }
 
 int
-_open(dl_plugin_t self, unsigned int index, int mode) {
+_open(dl_plugin_t self, int index, const char *input, int mode) {
     sp_priv_t p = (sp_priv_t)self->priv;
-    _send_cmd(p, p->text[p->filter[index]].c_str());
+    if (index >= 0 && index < p->filter.size())
+        _send_cmd(p, p->text[p->filter[index]].c_str(), mode);
+    else _send_cmd(p, input, mode);
 }

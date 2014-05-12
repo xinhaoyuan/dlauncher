@@ -19,7 +19,7 @@ extern "C" {
         int  (*update)   (dl_plugin_t self, const char *input);
         int  (*get_desc) (dl_plugin_t self, unsigned int index, const char **output_ptr);
         int  (*get_text) (dl_plugin_t self, unsigned int index, const char **output_ptr);
-        int  (*open)     (dl_plugin_t self, unsigned int index, int mode);
+        int  (*open)     (dl_plugin_t self, int index, const char *input, int mode);
     } dl_plugin_s;
 
     void register_plugin(dl_plugin_t plugin);

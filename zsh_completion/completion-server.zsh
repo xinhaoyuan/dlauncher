@@ -52,9 +52,11 @@ handle-request() {
 	print "request received from fd $connection"
 	while IFS= read -r -u $connection prefix &> /dev/null; do
 		read_something=1
-        if [[ $prefix == $'\1'* ]]; then
+        if [[ ${prefix[1]} == 'o' ]]; then
             # execute the command
-            ${prefix:1} &
+            sh -c "${prefix:1}" &
+        elif [[ ${prefix[1]} == 'O' ]]; then
+            urxvt -e sh -c "${prefix:1}" &
         else
 		    # send the prefix to be completed followed by a TAB to force
 		    # completion

@@ -66,7 +66,7 @@ static void hist_plugin_init(dl_plugin_t self);
 static int hist_plugin_update(dl_plugin_t self, const char *input);
 static int hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr);
-static int hist_plugin_open(dl_plugin_t self, unsigned int index, int mode);
+static int hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode);
 
 static dl_plugin_s hist_plugin = {
     .priv = NULL,
@@ -479,12 +479,17 @@ keypress(XKeyEvent *ev) {
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
-		if (cur_plugin >= 0 &&
-            sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count) {
-            const char *_text;
-            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
-            hist_add(plugin_entry[cur_plugin]->name, _text);
-            plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], sel_index, !!(ev->state & ShiftMask));
+		if (cur_plugin >= 0) {
+            if (sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count) {
+                const char *_text;
+                plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+                hist_add(plugin_entry[cur_plugin]->name, _text);
+                plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], sel_index, _text, !!(ev->state & ShiftMask));
+            } else {
+                /* no selected item */
+                hist_add(plugin_entry[cur_plugin]->name, text);
+                plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], -1, text, !!(ev->state & ShiftMask));
+            }
         }
         hide();
         return;
@@ -783,19 +788,17 @@ hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_p
 }
 
 int
-hist_plugin_open(dl_plugin_t self, unsigned int index, int mode) {
-    if (index >= self->item_count) {
+hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode) {
+    if (index < 0 || index >= self->item_count) {
         fprintf(stderr, "open out of bound\n");
         return 1;
     }
 
     hist_apply(hist_line_matched[index]);
-    update(0);
     if (cur_plugin >= 1)        /* not hist itself */
     {
-        const char *_text = strchr(hist_line_matched[index], ':') + 1;
-        hist_add(plugin_entry[cur_plugin]->name, _text);
-        plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], 0, mode);
+        hist_add(plugin_entry[cur_plugin]->name, text);
+        plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], -1, text, mode);
     }
 	return 0;
 }

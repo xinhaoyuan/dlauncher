@@ -141,14 +141,17 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, unsigned int index, int mode) {
+static int _open(dl_plugin_t self, int index, const char *input, int mode) {
     priv_s *p = (priv_s *)self->priv;
+    if (index >= 0 && index < p->candidates.size())
+        input = p->candidates[index].c_str();
+
     vector<string> args;
     // use urxvt here
     args.push_back(DEFAULT_TERM);
     args.push_back("-e");
     args.push_back("ssh");
-    args.push_back(p->candidates[index]);
+    args.push_back(input);
     execute(args);
     return 0;
 }

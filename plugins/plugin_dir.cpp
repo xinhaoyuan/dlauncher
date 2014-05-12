@@ -127,20 +127,22 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, unsigned int index, int mode) {
+static int _open(dl_plugin_t self, int index, const char *input, int mode) {
     priv_s *p = (priv_s *)self->priv;
     vector<string> args;
-    const char *path = p->candidates[index].c_str();
-    if (path[0] != '/') {
-        char *r;
-        asprintf(&r, "%s/%s", getenv("HOME"), path);
-        path = r;
-    } else path = strdup(path);
+    
+    if (index >= 0 && index < p->candidates.size())
+        input = p->candidates[index].c_str();
+
+    char *path;
+    if (input[0] != '/') {
+        asprintf(&path, "%s/%s", getenv("HOME"), input);
+    } else path = strdup(input);
 
     args.push_back(DEFAULT_FILE_MANAGER);
     args.push_back(path);
 
-    free((void *)path);
+    free(path);
     
     execute(args);
     return 0;

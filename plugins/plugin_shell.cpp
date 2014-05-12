@@ -45,7 +45,7 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, unsigned int index, int mode) {
+static int _open(dl_plugin_t self, int index, const char *input, int mode) {
     string *p = (string *)self->priv;
     vector<string> args;
     
