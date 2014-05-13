@@ -527,7 +527,9 @@ keypress(XKeyEvent *ev) {
         plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
 		strncpy(text, _text, sizeof text);
 		cursor = strlen(text);
-        break;
+
+        update(1);
+        return;
 	}
 	drawmenu();
 }

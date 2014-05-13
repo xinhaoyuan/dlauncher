@@ -110,7 +110,7 @@ _connect(sp_priv_t p) {
 
     sa.sun_family = AF_UNIX;
     strcpy(sa.sun_path, p->socket_path);
-    len = strlen(sa.sun_path) + sizeof(sa.sun_family);
+    len = SUN_LEN(&sa);
 
     if (connect(p->conn, (struct sockaddr *)&sa, len) == -1) {
         close(p->conn);

@@ -64,7 +64,7 @@ handle-request() {
             cached="$cached_input[$connection]"
             lw=$(last-word "$input")
             
-            if [[ -n "$input" && "${input:0:${#cached}}" == "$cached" && $lw -le ${#cached} ]]; then
+            if [[ -n "$input" && "${input:0:${#cached}}" == "$cached" && ! "${input:${#cached}}" =~ .*[\ \'\"/].* ]]; then
                 print -u $connection "filter"
                 print -n -u $connection $'\0'
                 break;
