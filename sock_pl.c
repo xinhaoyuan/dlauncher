@@ -1,5 +1,5 @@
 #include "plugin.h"
-#include "socket_pl.h"
+#include "sock_pl.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -56,7 +56,7 @@ static char *_get_opt(const char *opt, const char *name) {
 }
 
 int
-socket_plugin_register(const char *name, const char *socket_path, const char *opt) {
+sock_plugin_register(const char *name, const char *socket_path, const char *opt) {
     sp_priv_t p = (sp_priv_t)malloc(sizeof(sp_priv_s));
     if (!p) return -1;
 
@@ -67,8 +67,8 @@ socket_plugin_register(const char *name, const char *socket_path, const char *op
     }
 
     p->socket_path = strdup(socket_path);
-    p->opt = strdup(opt);
-    plugin->name = strdup(name);
+    p->opt         = strdup(opt);
+    plugin->name   = strdup(name);
     char *pri = _get_opt(opt, "PRIORITY");
     plugin->priority = pri ? atoi(pri) : 0;
     if (pri) free(pri);

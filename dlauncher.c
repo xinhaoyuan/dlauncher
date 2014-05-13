@@ -24,7 +24,7 @@
 #include "draw.h"
 #include "hist.h"
 #include "plugin.h"
-#include "socket_pl.h"
+#include "exec_pl.h"
 #include "defaults.h"
 
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
@@ -122,11 +122,10 @@ static void plugin_cycle_prev(void);
 static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
 static char *(*fstrstr)(const char *, const char *) = strstr;
 
-int
-main(int argc, char *argv[]) {
-	int i;
-
-	for(i = 1; i < argc; i++)
+static void
+process_args(int argc, char *argv[]) {
+    int i;
+    for (i = 0; i < argc; i++) {
 		/* these options take no arguments */
 		if(!strcmp(argv[i], "-v")) {      /* prints version information */
 			puts("dlauncher-"VERSION", © 2006-2012 dmenu engineers, see LICENSE for details");
@@ -140,7 +139,7 @@ main(int argc, char *argv[]) {
 		}
 		else if(i+1 == argc)
 			usage();
-		/* these options take one argument */
+        /* these options take one argument */
 		else if(!strcmp(argv[i], "-l"))   /* number of lines in vertical list */
 			lines = atoi(argv[++i]);
 		else if(!strcmp(argv[i], "-fn"))  /* font or font set */
@@ -153,34 +152,107 @@ main(int argc, char *argv[]) {
 			selbgcolor = argv[++i];
 		else if(!strcmp(argv[i], "-sf"))  /* selected foreground color */
 			selfgcolor = argv[++i];
-		else if (!strcmp(argv[i], "-pl"))  /* socket plugin */ {
+		else if (!strcmp(argv[i], "-epl")) { /* executable plugin */
             char *desc = strdup(argv[++ i]);
-            /* format: name:socket_path:opt */
+            /* format: name:path/cmd:opt */
             char *name = desc;
             
-            char *socket_path = desc;
-            while (*socket_path && *socket_path != ':') ++ socket_path;
-            if (*socket_path == ':') {
-                *socket_path = 0;
-                ++ socket_path;
+            char *cmd = desc;
+            while (*cmd && *cmd != ':') {
+                if (*cmd == '\\' && cmd[1] == ':') ++ cmd;
+                ++ cmd;
+            }
+            
+            if (*cmd == ':') {
+                *cmd = 0;
+                ++ cmd;
             } else {
-                fprintf(stderr, "invalid arg for -pl\n");
+                fprintf(stderr, "invalid arg for %s\n", argv[i]);
                 usage();
                 exit(EXIT_FAILURE);
             }
 
-            char *opt = socket_path;
-            while (*opt && *opt != ':') ++ opt;
+            char *opt = cmd;
+            while (*opt && *opt != ':') {
+                if (*opt == '\\' && opt[1] == ':') ++ opt;
+                ++ opt;
+            }
             if (*opt == ':') {
                 *opt = 0;
                 ++ opt;
             }
             
-            socket_plugin_register(name, socket_path, opt);
+            exec_plugin_register(name, cmd, opt);
             free(desc);
-        }
-        else usage();
+        } else if (!strcmp(argv[i], "-args")) { /* extra args in file, one per line */
+            const char *fn = argv[++ i];
+            FILE *f = fopen(fn, "r");
+            if (!f) {
+                fprintf(stderr, "cannot open file %s\n", fn);
+                usage();
+                exit(EXIT_FAILURE);
+            }
 
+            int   buf_alloc = BUFSIZ;
+            int   buf_size  = 0;
+            char *buf = (char *)malloc(buf_alloc);
+
+            if (!buf) {
+                fprintf(stderr, "malloc failed\n");
+                exit(EXIT_FAILURE);
+            }
+
+            int nargc = 0;
+            char *line = NULL; size_t line_size; ssize_t gl_ret;
+            while ((gl_ret = getline(&line, &line_size, f)) >= 0) {
+                if (line[0] == '#') continue;
+                ++ nargc;
+                if (line[gl_ret - 1] == '\n') -- gl_ret;
+                while (buf_size + gl_ret + 1 > buf_alloc) {
+                    buf = (char *)realloc(buf, buf_alloc << 1);
+                    if (!buf) {
+                        fprintf(stderr, "malloc failed\n");
+                        exit(EXIT_FAILURE);
+                    }
+                    buf_alloc <<= 1;
+                }
+                memcpy(buf + buf_size, line, gl_ret);
+                buf[buf_size + gl_ret] = 0;
+                buf_size += gl_ret + 1;
+            }
+            free(line);
+            
+            fclose(f);
+
+            char **nargv = (char **)malloc(sizeof(char *) * nargc);
+            if (!nargv) {
+                fprintf(stderr, "malloc failed\n");
+                exit(EXIT_FAILURE);
+            }
+            
+            line = buf;
+            int j;
+            for (j = 0; j < nargc; ++ j) {
+                nargv[j] = line; line = line + strlen(line) + 1;
+            }
+
+            process_args(nargc, nargv);
+            
+            free(nargv);
+            free(buf);
+        } else {
+            usage();
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+int
+main(int argc, char *argv[]) {
+	int i;
+
+    process_args(argc - 1, argv + 1);
+	
 	dc = initdc();
 	initfont(dc, font ? font : DEFAULT_FONT);
     normcol = initcolor(dc, normfgcolor, normbgcolor);
@@ -190,6 +262,7 @@ main(int argc, char *argv[]) {
     
     setup();
 
+    signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, SIG_IGN);
     signal(SIGUSR1, signal_show);
 
@@ -994,7 +1067,8 @@ void
 usage(void) {
 	fputs("usage: dlauncher [-b] [-i] [-l lines] [-fn font]\n"
 	      "                 [-nb color] [-nf color] [-sb color] [-sf color] [-v]\n"
-          "                 [-pl name:socket_path[:opt]]*\n"
+          "                 [-epl name:cmd[:opt]]*\n"
+          "                 [-spl name:socket_path[:opt]]*\n"
           , stderr);
 	exit(EXIT_FAILURE);
 }
