@@ -24,7 +24,6 @@
 #include "draw.h"
 #include "hist.h"
 #include "plugin.h"
-#include "exec_pl.h"
 #include "defaults.h"
 
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
@@ -152,27 +151,27 @@ process_args(int argc, char *argv[]) {
 			selbgcolor = argv[++i];
 		else if(!strcmp(argv[i], "-sf"))  /* selected foreground color */
 			selfgcolor = argv[++i];
-		else if (!strcmp(argv[i], "-epl")) { /* executable plugin */
+		else if (!strcmp(argv[i], "-pl")) { /* external plugin */
             char *desc = strdup(argv[++ i]);
-            /* format: name:path/cmd:opt */
+            /* format: name:entry[:opt] */
             char *name = desc;
             
-            char *cmd = desc;
-            while (*cmd && *cmd != ':') {
-                if (*cmd == '\\' && cmd[1] == ':') ++ cmd;
-                ++ cmd;
+            char *entry = desc;
+            while (*entry && *entry != ':') {
+                if (*entry == '\\' && entry[1] == ':') ++ entry;
+                ++ entry;
             }
             
-            if (*cmd == ':') {
-                *cmd = 0;
-                ++ cmd;
+            if (*entry == ':') {
+                *entry = 0;
+                ++ entry;
             } else {
                 fprintf(stderr, "invalid arg for %s\n", argv[i]);
                 usage();
                 exit(EXIT_FAILURE);
             }
 
-            char *opt = cmd;
+            char *opt = entry;
             while (*opt && *opt != ':') {
                 if (*opt == '\\' && opt[1] == ':') ++ opt;
                 ++ opt;
@@ -182,7 +181,7 @@ process_args(int argc, char *argv[]) {
                 ++ opt;
             }
             
-            exec_plugin_register(name, cmd, opt);
+            external_plugin_create(name, entry, opt);
             free(desc);
         } else if (!strcmp(argv[i], "-args")) { /* extra args in file, one per line */
             const char *fn = argv[++ i];
@@ -1067,8 +1066,8 @@ void
 usage(void) {
 	fputs("usage: dlauncher [-b] [-i] [-l lines] [-fn font]\n"
 	      "                 [-nb color] [-nf color] [-sb color] [-sf color] [-v]\n"
-          "                 [-epl name:cmd[:opt]]*\n"
-          "                 [-spl name:socket_path[:opt]]*\n"
+          "                 [-args external_args_file]*\n"
+          "                 [-pl name:entry[:opt]]*\n"
           , stderr);
 	exit(EXIT_FAILURE);
 }
