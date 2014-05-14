@@ -32,6 +32,8 @@
 #define MAX(a,b)              ((a) > (b) ? (a) : (b))
 
 static void calcoffsets(void);
+static void item_sel_next(void);
+static void complete_text(int update);
 static char *cistrstr(const char *s, const char *sub);
 static void drawmenu(void);
 static void grabkeyboard(void);
@@ -446,6 +448,7 @@ keypress(XKeyEvent *ev) {
 		case XK_m: ksym = XK_Return;    break;
 		case XK_n: ksym = XK_Down;      break;
 		case XK_p: ksym = XK_Up;        break;
+        case XK_Tab: complete_text(0);  return;
         case XK_g: /* cancel selection */
             sel_index = -1;
             break;
@@ -485,8 +488,8 @@ keypress(XKeyEvent *ev) {
         case XK_w:
         case XK_Up:   hist_show_prev(); return;
         case XK_s:
-        case XK_Down: hist_show_next(); return;
-
+        case XK_Down:  hist_show_next(); return;
+        case XK_slash: complete_text(0); return;
 		default:
 			return;
 		}
@@ -587,33 +590,59 @@ keypress(XKeyEvent *ev) {
 		if(lines > 0)
 			return;
 		/* fallthrough */
-	case XK_Down:
-        if (cur_plugin < 0) break;
-        if (sel_index < 0) sel_index = cur_pindex;
-        else if (sel_index + 1 < plugin_entry[cur_plugin]->item_count)
-            ++ sel_index;
+	case XK_Down: item_sel_next(); break;
+	case XK_Tab: complete_text(1); return;
+	}
+	drawmenu();
+}
+
+void
+item_sel_next(void) {
+    if (cur_plugin < 0) return;
+    if (sel_index < 0) sel_index = cur_pindex;
+    else if (sel_index + 1 < plugin_entry[cur_plugin]->item_count) {
+        ++ sel_index;
         if (sel_index == next_pindex &&
             next_pindex < plugin_entry[cur_plugin]->item_count) {
             cur_pindex = next_pindex;
             calcoffsets();
         }
-		break;
-	case XK_Tab:
-		if (cur_plugin < 0 || plugin_entry[cur_plugin]->item_count == 0)
-            return;
-        if (sel_index < 0 ||
-            sel_index >= plugin_entry[cur_plugin]->item_count)
-			sel_index = 0;
-        
-        const char *_text;
-        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
-		strncpy(text, _text, sizeof text);
-		cursor = strlen(text);
+    } else {
+        sel_index = cur_pindex = 0;
+        calcoffsets();
+    }
 
-        update(1);
+}
+
+void
+complete_text(int to_update) {
+    if (cur_plugin < 0 || plugin_entry[cur_plugin]->item_count == 0)
         return;
-	}
-	drawmenu();
+    if (sel_index < 0 ||
+        sel_index >= plugin_entry[cur_plugin]->item_count)
+        sel_index = 0;
+    const char *_text;
+
+    if (to_update == 0) {
+        int moved = 0;
+        while (1) {
+            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+            if (!strcmp(text, _text) && !moved) {
+                item_sel_next();
+                moved = 1;
+            } else {
+                strncpy(text, _text, sizeof text);
+                cursor = strlen(text);
+                break;
+            }
+        }
+        drawmenu();
+    } else {
+        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+        strncpy(text, _text, sizeof text);
+        cursor = strlen(text);
+        update(1);
+    }
 }
 
 void
