@@ -1,7 +1,6 @@
 #!/usr/bin/env zsh
 
 while read line; do
-    # process queries only
     if [[ ${line:0:1} == 'q' ]]; then
         print "clear"
         if [[ ${line:1:1} == '?' ]]; then
@@ -12,5 +11,11 @@ while read line; do
             fi
         fi
         print -n $'\0'
+    elif [[ ${line:0:1} == 'o' ]]; then
+        r=$(print "${line:2}" | bc -l 2>/dev/null)
+        print -n "$r" | xclip -i
+    elif [[ ${line:0:1} == 'O' ]]; then
+        r=$(print "${line:2}" | bc -l 2>/dev/null)
+        print -n "$r" | xclip -i -selection clipboard
     fi
 done
