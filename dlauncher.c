@@ -212,7 +212,7 @@ process_args(int argc, char *argv[]) {
                 /* left trim the line */
                 char *line_start = line;
                 while (*line_start && *line_start == ' ') ++ line_start;
-                if (*line_start == 0 || *line_start == '#') continue;
+                if (*line_start == 0 || *line_start == '#' || *line_start == '\n') continue;
                 gl_ret -= line_start - line;
                 
                 ++ nargc;
