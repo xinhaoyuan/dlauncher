@@ -51,6 +51,36 @@ dlauncher start - start the dlauncher deamon
 dlauncher exit  - kill the dlauncher deamon
 dlauncher open  - activate the dlauncher ui
 
+## Extra options for dlauncher.bin besides of dmenu options
+
+   -args [config-file]
+
+   provide extra arguments in the file, one argument per line. Spaces
+   on left will be trimed. Empty lines and lines start with `#' will
+   be skipped.
+
+   -pl "[name]:[entry][:options]"
+
+   specify extra plugin with name [name]. Depends on the type, the
+   entry are interpreted in different ways. For example, for exec
+   plugins:
+
+   -pl "[name]:[command line]:TYPE=EXEC[:other options]"
+
+   For plugins using unix sockets:
+
+   -pl "[name]:[socket path]:TYPE=UNIXSOCK[:other options]"
+
+   other options supported are:
+
+     PRIORITY=[priority]      - the plugin priority
+     RETRY_CMD=[command line] - command line to be executed when plugin connection failed
+     RETRY_DELAY=[seconds]    - do not retry for number of seconds since last retry
+
 # External Plugin Protocol
 
-There is no documents yet. One can refer to the ``plugin.c'' to figure out the protocol ;P
+There is no documents yet. One can refer to the ``plugin.c'' to figure
+out the protocol ;P
+
+Also, check out plugins/calc.zsh to see how a minimized external
+plugin are written.
