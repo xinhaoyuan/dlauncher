@@ -82,16 +82,16 @@ external_plugin_create(const char *name, const char *entry, const char *opt) {
     }
 
     char *type = _get_opt(opt, "TYPE");
-    fprintf(stderr, "type: %s\n", type);
-    
     if (!type || !strcmp(type, "EXEC")) {
         p->type  = PL_TYPE_EXEC;
         p->entry = strdup(entry);
     } else if (!strcmp(type, "UNIXSOCK")) {
         p->type  = PL_TYPE_SOCK;
         p->entry = strdup(entry);
+    } else {
+        fprintf(stderr, "unknown type of external plugin\n");
+        return -1;
     }
-
     if (type) free(type);
     
     p->opt       = strdup(opt);
@@ -124,8 +124,7 @@ external_plugin_create(const char *name, const char *entry, const char *opt) {
     plugin->get_text = &_get_text;
     plugin->open     = &_open;
 
-    register_plugin(plugin);
-    return -1;
+    return register_plugin(plugin);
 }
 
 static int
@@ -189,7 +188,7 @@ _connect(ep_priv_t p) {
             goto err;
         }
 
-        return p->conn;
+        return 0;
     
       err:
         return p->conn = -1;
@@ -267,6 +266,8 @@ _update_cache(ep_priv_t p, const char *input) {
         _reset_for_retry(p);
         return;
     }
+
+    // fprintf(stderr, "connected\n");
 
     // send query prefix
     if (_write(p, "q", 1) != 1) {

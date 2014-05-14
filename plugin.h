@@ -22,8 +22,8 @@ extern "C" {
         int  (*open)     (dl_plugin_t self, int index, const char *input, int mode);
     } dl_plugin_s;
 
-    void register_plugin(dl_plugin_t plugin); /* implemented in dlauncher.c */
-    int  external_plugin_create(const char *name, const char *entry, const char *opt);
+    int register_plugin(dl_plugin_t plugin); /* implemented in dlauncher.c */
+    int external_plugin_create(const char *name, const char *entry, const char *opt);
     
 #if __cplusplus
 }

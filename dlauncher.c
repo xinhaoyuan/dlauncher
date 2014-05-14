@@ -108,11 +108,13 @@ static dl_plugin_t  plugin_entry[NPLUGIN];
 static int cur_plugin;
 static int cur_pindex, prev_pindex, next_pindex, sel_index;
 
-void register_plugin(dl_plugin_t plugin) {
-    if (plugin_count >= NPLUGIN) return;
+int
+register_plugin(dl_plugin_t plugin) {
+    if (plugin_count >= NPLUGIN) return -1;
     /* no semicolon in the name of a plugin is allowed */
-    if (strchr(plugin->name, ':')) return;
+    if (strchr(plugin->name, ':')) return -1;
     plugin_entry[plugin_count ++] = plugin;
+    return 0;
 }
 
 static void plugin_cycle_next(void);
@@ -142,15 +144,15 @@ process_args(int argc, char *argv[]) {
 		else if(!strcmp(argv[i], "-l"))   /* number of lines in vertical list */
 			lines = atoi(argv[++i]);
 		else if(!strcmp(argv[i], "-fn"))  /* font or font set */
-			font = argv[++i];
+			font = strdup(argv[++i]);
 		else if(!strcmp(argv[i], "-nb"))  /* normal background color */
-			normbgcolor = argv[++i];
+			normbgcolor = strdup(argv[++i]);
 		else if(!strcmp(argv[i], "-nf"))  /* normal foreground color */
-			normfgcolor = argv[++i];
+			normfgcolor = strdup(argv[++i]);
 		else if(!strcmp(argv[i], "-sb"))  /* selected background color */
-			selbgcolor = argv[++i];
+			selbgcolor = strdup(argv[++i]);
 		else if(!strcmp(argv[i], "-sf"))  /* selected foreground color */
-			selfgcolor = argv[++i];
+			selfgcolor = strdup(argv[++i]);
 		else if (!strcmp(argv[i], "-pl")) { /* external plugin */
             char *desc = strdup(argv[++ i]);
             /* format: name:entry[:opt] */
@@ -181,7 +183,10 @@ process_args(int argc, char *argv[]) {
                 ++ opt;
             }
             
-            external_plugin_create(name, entry, opt);
+            if (external_plugin_create(name, entry, opt) != 0) {
+                fprintf(stderr, "failed to create plugin\n");
+                exit(EXIT_FAILURE);
+            }
             free(desc);
         } else if (!strcmp(argv[i], "-args")) { /* extra args in file, one per line */
             const char *fn = argv[++ i];
@@ -204,7 +209,12 @@ process_args(int argc, char *argv[]) {
             int nargc = 0;
             char *line = NULL; size_t line_size; ssize_t gl_ret;
             while ((gl_ret = getline(&line, &line_size, f)) >= 0) {
-                if (line[0] == '#') continue;
+                /* left trim the line */
+                char *line_start = line;
+                while (*line_start && *line_start == ' ') ++ line_start;
+                if (*line_start == 0 || *line_start == '#') continue;
+                gl_ret -= line_start - line;
+                
                 ++ nargc;
                 if (line[gl_ret - 1] == '\n') -- gl_ret;
                 while (buf_size + gl_ret + 1 > buf_alloc) {
@@ -215,7 +225,7 @@ process_args(int argc, char *argv[]) {
                     }
                     buf_alloc <<= 1;
                 }
-                memcpy(buf + buf_size, line, gl_ret);
+                memcpy(buf + buf_size, line_start, gl_ret);
                 buf[buf_size + gl_ret] = 0;
                 buf_size += gl_ret + 1;
             }
