@@ -3,7 +3,12 @@
 # one argument per line (empty lines are skipped)
 -fn
 Consolas-12
+
 # uncomment and modify the following adds zsh completion in dlauncher
 # I admit it's kind of tricky for now - it will be simplified in further
-# -pl
-# zsh:/tmp/dlauncher_zshc-<USER>/socket:TYPE=UNIXSOCK:RETRY_CMD=zsh /home/<USER>/dlauncher/zsh_completion/completion-server.zsh /tmp/dlauncher_zshc-<USER>
+#-pl
+#zsh:/tmp/dlauncher_zshc-<USER>/socket:TYPE=UNIXSOCK:RETRY_CMD=zsh /usr/local/share/dlauncher/completion-server.zsh /tmp/dlauncher_zshc-<USER>:PRIORITY=40
+
+# calculator plugin
+#-pl
+#calc:zsh /usr/local/share/dlauncher/calc.zsh:TYPE=EXEC:PRIORITY=100
