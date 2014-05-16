@@ -2,7 +2,7 @@
 # $HOME/.dlauncher contains extra args passed into dlauncher.bin, 
 # one argument per line (empty lines are skipped)
 -fn
-Consolas-12
+Monospace-12
 
 # uncomment and modify the following adds zsh completion in dlauncher
 # I admit it's kind of tricky for now - it will be simplified in further
