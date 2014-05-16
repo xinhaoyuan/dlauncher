@@ -83,5 +83,5 @@ dlauncher open  - activate the dlauncher ui
 There is no documents yet. One can refer to the ``plugin.c'' to figure
 out the protocol ;P
 
-Also, check out plugins/calc.zsh to see how a minimized external
+Also, check out external/calc.zsh to see how a minimized external
 plugin are written.
