@@ -39,7 +39,7 @@ static void drawmenu(void);
 static void grabkeyboard(void);
 static void insert(const char *str, ssize_t n);
 static void keypress(XKeyEvent *ev);
-static void update(int no_escape);
+static void update(int lock, int query);
 static size_t nextrune(int inc);
 static void paste(void);
 static void run(void);
@@ -64,20 +64,23 @@ static char       *hist_file_path;
        int         hist_index;
 
 static void hist_plugin_init(dl_plugin_t self);
-static int hist_plugin_update(dl_plugin_t self, const char *input);
-static int hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr);
-static int hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr);
-static int hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode);
+static int  hist_plugin_query(dl_plugin_t self, const char *input);
+static int  hist_plugin_before_update(dl_plugin_t self);
+static int  hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr);
+static int  hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr);
+static int  hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode);
 
 static dl_plugin_s hist_plugin = {
-    .priv = NULL,
-    .name = "hist",
-    .priority = 100,
-    .init   = &hist_plugin_init,
-    .update = &hist_plugin_update,
-    .get_desc = &hist_plugin_get_desc,
-    .get_text = &hist_plugin_get_text,
-    .open = &hist_plugin_open
+    .priv          = NULL,
+    .name          = "hist",
+    .priority      = 100,
+    .init          = &hist_plugin_init,
+    .query         = &hist_plugin_query,
+    .before_update = &hist_plugin_before_update,
+    .update        = NULL,      /* never called */
+    .get_desc      = &hist_plugin_get_desc,
+    .get_text      = &hist_plugin_get_text,
+    .open          = &hist_plugin_open
 };
 
 static const char *prompt_empty = "DLauncher-"VERSION;
@@ -104,8 +107,9 @@ static XIC xic;
 
 #define NPLUGIN 200
 
-static unsigned int plugin_count = 1; /* hist plugin pre-included */
+static unsigned int plugin_count = 1; /* hist plugin preserved */
 static dl_plugin_t  plugin_entry[NPLUGIN];
+static int          plugin_update[NPLUGIN];
 
 static int cur_plugin;
 static int cur_pindex, prev_pindex, next_pindex, sel_index;
@@ -115,6 +119,7 @@ register_plugin(dl_plugin_t plugin) {
     if (plugin_count >= NPLUGIN) return -1;
     /* no semicolon in the name of a plugin is allowed */
     if (strchr(plugin->name, ':')) return -1;
+    plugin->id = plugin_count;
     plugin_entry[plugin_count ++] = plugin;
     return 0;
 }
@@ -270,6 +275,7 @@ main(int argc, char *argv[]) {
 	selcol = initcolor(dc, selfgcolor, selbgcolor);
 
     plugin_entry[0] = &hist_plugin;
+    plugin_entry[0]->id = 0;
     
     setup();
 
@@ -421,7 +427,7 @@ insert(const char *str, ssize_t n) {
 	if(n > 0)
 		memcpy(&text[cursor], str, n);
 	cursor += n;
-    update(0);
+    update(1, 1);
 }
 
 void
@@ -621,6 +627,7 @@ complete_text(int to_update) {
     if (sel_index < 0 ||
         sel_index >= plugin_entry[cur_plugin]->item_count)
         sel_index = 0;
+
     const char *_text;
 
     if (to_update == 0) {
@@ -641,12 +648,12 @@ complete_text(int to_update) {
         plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
         strncpy(text, _text, sizeof text);
         cursor = strlen(text);
-        update(1);
+        update(1, 1);
     }
 }
 
 void
-update(int no_escape) {
+update(int lock, int query) {
     char *prompt_ptr = prompt_buf;
     char *prompt_sel_begin = prompt_buf, *prompt_sel_end = prompt_buf;
     int  plugin_best = -1;
@@ -660,14 +667,17 @@ update(int no_escape) {
         *plugin_filter = 0;
     }
 
-    if (no_escape == 0 && cur_plugin >= 0 && plugin_entry[cur_plugin]->priority < 0)
+    if (!lock && cur_plugin >= 0 && plugin_entry[cur_plugin]->priority < 0)
         cur_plugin = -1;
 
     int p;
     for (p = 0; p < plugin_count; ++ p) {
         if (plugin_filter && strstr(plugin_entry[p]->name, text) == NULL) goto skip;
-        if (plugin_entry[p]->update(plugin_entry[p], input)) goto skip;
-        if (plugin_entry[p]->item_count == 0) goto skip;
+        if (query) {
+            if (plugin_entry[p]->query(plugin_entry[p], input)) goto skip;
+        }
+        if (plugin_entry[p]->item_count == 0 &&
+            (!lock || p != cur_plugin)) goto skip;
         
         if (cur_plugin == p) prompt_sel_begin = prompt_ptr;
         int w = snprintf(prompt_ptr, sizeof(prompt_buf) - (prompt_ptr - prompt_buf),
@@ -680,12 +690,14 @@ update(int no_escape) {
             prompt_best_begin = prompt_ptr - w + 1;
             prompt_best_end = prompt_ptr;
         }
-        
+
+        plugin_entry[p]->enabled = 1;
         continue;
 
       skip:
+        fprintf(stderr, "skip %d\n", p);
         /* current plugin no longer available */
-        plugin_entry[p]->item_count = 0;
+        plugin_entry[p]->enabled = 0;
         if (cur_plugin == p) cur_plugin = -1;
     }
 
@@ -702,7 +714,7 @@ update(int no_escape) {
         *prompt_sel_end   = ']';
 
         cur_pindex = 0;
-        sel_index = plugin_entry[cur_plugin]->item_default_sel;
+        sel_index = -1;
         prompt = prompt_buf;
 
         calcoffsets();
@@ -852,7 +864,7 @@ hist_show_prev(void) {
     if (hist_index == -1) return;
     if (hist_index > 0) -- hist_index;
     hist_apply(hist_line[hist_index]);
-    update(0);
+    update(0, 1);
 }
 
 void
@@ -861,11 +873,11 @@ hist_show_next(void) {
     if (hist_index == -1) return;
     if (hist_index < hist_count - 1) ++ hist_index;
     hist_apply(hist_line[hist_index]);
-    update(0);
+    update(0, 1);
 }
 
 int
-hist_plugin_update(dl_plugin_t self, const char *input) {
+hist_plugin_query(dl_plugin_t self, const char *input) {
     int count = 0;
     int i;
     for (i = hist_count - 1; i >= 0; -- i)
@@ -873,9 +885,11 @@ hist_plugin_update(dl_plugin_t self, const char *input) {
             hist_line_matched[count ++] = hist_line[i];
 
     self->item_count = count;
-    self->item_default_sel = count ? 0 : -1;
     return 0;
 }
+
+int
+hist_plugin_before_update(dl_plugin_t self) { return 0; }
 
 int
 hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr)
@@ -919,14 +933,60 @@ hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode) {
 	return 0;
 }
 
+fd_set in_fds, out_fds, stat_fds;
+int    max_fd;
+int    fd_alloc;
+int    fd_size;
+int   *fd_plugin;
+int   *fds;
+int   *fd_flags;
 
+int
+register_update_fd(dl_plugin_t plugin, int fd, int event) {
+    if (fd_size == fd_alloc) {
+        fd_plugin = (int *)realloc(fd_plugin, sizeof(int) * (fd_alloc << 1));
+        fds       = (int *)realloc(fds, sizeof(int) * (fd_alloc << 1));
+        fd_flags  = (int *)realloc(fd_flags, sizeof(int) * (fd_alloc << 1));
+
+        if (!fd_plugin || !fds || !fd_flags) {
+            /* :( */
+            exit(EXIT_FAILURE);
+        }
+
+        fd_alloc <<= 1;
+    }
+
+    int id = fd_size ++;
+        
+    fd_plugin[id] = plugin->id;
+    fds[id] = fd;
+    fd_flags[id] = event;
+
+    if (max_fd < fd) max_fd = fd;
+    if (event & DL_FD_EVENT_READ)
+        FD_SET(fd, &in_fds);
+    if (event & DL_FD_EVENT_WRITE)
+        FD_SET(fd, &out_fds);
+    if (event & DL_FD_EVENT_STATUS)
+        FD_SET(fd, &stat_fds);
+
+    return 0;
+}
 
 void
 run(void) {
 	XEvent ev;
     int x11_fd = ConnectionNumber(dc->dpy);
-    fd_set in_fds;
+    int i;
     struct timeval tv;
+
+    fd_alloc = NPLUGIN;
+    fd_size  = 0;
+    fd_plugin= (int *)malloc(sizeof(int) * fd_alloc);
+    fds      = (int *)malloc(sizeof(int) * fd_alloc);
+    fd_flags = (int *)malloc(sizeof(int) * fd_alloc);
+
+    if (!fd_plugin || !fds || !fd_flags) return;
 
 	while(1) {
         if (to_show) {
@@ -957,13 +1017,42 @@ run(void) {
             }
         }
 
-        FD_ZERO(&in_fds);
+        FD_ZERO(&in_fds); FD_ZERO(&out_fds); FD_ZERO(&stat_fds);
         FD_SET(x11_fd, &in_fds);
+        max_fd = x11_fd;
 
         tv.tv_usec = 0;
-        tv.tv_sec = 1;
+        tv.tv_sec = 3;
 
-        select(x11_fd + 1, &in_fds, 0, 0, &tv);
+        fd_size = 0;
+        for (i = 0; i < plugin_count; ++ i) {
+            plugin_update[i] = 0;
+            plugin_entry[i]->before_update(plugin_entry[i]);
+        }
+
+        select(max_fd + 1, &in_fds, &out_fds, &stat_fds, &tv);
+        
+        for (i = 0; i < fd_size; ++ i) {
+            if ((fd_flags[i] & DL_FD_EVENT_READ) &&
+                FD_ISSET(fds[i], &in_fds))
+                plugin_update[fd_plugin[i]] = 1;
+            else if ((fd_flags[i] & DL_FD_EVENT_WRITE) &&
+                     FD_ISSET(fds[i], &out_fds))
+                plugin_update[fd_plugin[i]] = 1;
+            else if ((fd_flags[i] & DL_FD_EVENT_STATUS) &&
+                     FD_ISSET(fds[i], &stat_fds))
+                plugin_update[fd_plugin[i]] = 1;
+        }
+
+        int to_update = 0;
+        for (i = 0; i < plugin_count; ++ i) {
+            if (plugin_update[i]) {
+                plugin_entry[i]->update(plugin_entry[i]);
+                to_update = 1;
+            }
+        }
+
+        if (showed && to_update) update(1, 0);
     }
 }
 
@@ -1053,10 +1142,10 @@ void
 plugin_cycle_next(void) {
     if (cur_plugin < 0) return;
     int p = (cur_plugin + 1) % plugin_count;
-    while (p != cur_plugin && plugin_entry[p]->item_count == 0)
+    while (p != cur_plugin && !plugin_entry[p]->enabled)
         p = (p + 1) % plugin_count;
     cur_plugin = p;
-    update(1);
+    update(1, 0);
 }
 
 void
@@ -1064,10 +1153,10 @@ plugin_cycle_prev(void) {
     if (cur_plugin < 0) return;
     int step = plugin_count - 1;
     int p = (cur_plugin + step) % plugin_count;
-    while (p != cur_plugin && plugin_entry[p]->item_count == 0)
+    while (p != cur_plugin && !plugin_entry[p]->enabled)
         p = (p + step) % plugin_count;
     cur_plugin = p;
-    update(1);
+    update(1, 0);
 }
 
 void
@@ -1083,7 +1172,7 @@ show(void) {
     XResizeWindow(dc->dpy, win, mw, mh);
     XMapRaised(dc->dpy, win);
 	resizedc(dc, mw, mh);
-	update(0);
+	update(0, 1);
 
     showed = 1;
 }

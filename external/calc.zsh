@@ -2,7 +2,7 @@
 
 while read line; do
     if [[ ${line:0:1} == 'q' ]]; then
-        print "clear"
+        print -n "c"
         if [[ ${line:1:1} == '?' ]]; then
             r=$(print "${line:2}" | bc -l 2>/dev/null)
             if [[ -n "$r" ]]; then

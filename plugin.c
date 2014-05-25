@@ -13,9 +13,18 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <assert.h>
+#include <fcntl.h>
 
 #define PL_TYPE_EXEC 0
 #define PL_TYPE_SOCK 1
+
+#define NDEBUG
+
+#ifndef NDEBUG
+#define DEBUG(x ...) x
+#else
+#define DEBUG(x ...)
+#endif
 
 typedef struct ep_priv_s *ep_priv_t;
 typedef struct ep_priv_s {
@@ -25,6 +34,8 @@ typedef struct ep_priv_s {
     char  *retry_cmd;
     int    retry_delay;
 
+    /* ready for next query */
+    int    ready;
     /* for exec */
     int    stdin_fd;
     int    stdout_fd;
@@ -33,16 +44,26 @@ typedef struct ep_priv_s {
     
     int    ts_init_flag;
     time_t last_retry_timestamp;
+
+    int    async;
+    
+    int    item_alloc;
     int    item_count;
     int    filter_count;
-    char  *recv_buf;
-    char **desc;
-    char **text;
+    int   *desc;
+    int   *text;
     int   *filter;
+
+    char  *recv_buf;
+    int    rb_alloc;
+    int    rb_size;
+    int    rb_stamp;
 } ep_priv_s;
 
 static void _init     (dl_plugin_t self);
-static int  _update   (dl_plugin_t self, const char *input);
+static int  _query    (dl_plugin_t self, const char *input);
+static int  _before_update (dl_plugin_t self);
+static int  _update   (dl_plugin_t self);
 static int  _get_desc (dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int  _get_text (dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int  _open     (dl_plugin_t self, int index, const char *input, int mode);
@@ -101,6 +122,12 @@ external_plugin_create(const char *name, const char *entry, const char *opt) {
     plugin->priority = pri ? atoi(pri) : 0;
     if (pri) free(pri);
 
+    char *async = _get_opt(opt, "ASYNC");
+    if (async && *async)        /* non empty */
+        p->async = 1;
+    else p->async = 0;
+    if (async) free(async);
+    
     char *retry_delay = _get_opt(opt, "RETRY_DELAY");
     p->retry_delay = retry_delay ? atoi(retry_delay) : 3;
     if (retry_delay) free(retry_delay);
@@ -116,9 +143,10 @@ external_plugin_create(const char *name, const char *entry, const char *opt) {
 
     plugin->priv = p;
     plugin->item_count = 0;
-    plugin->item_default_sel = 0;
     
     plugin->init     = &_init;
+    plugin->query    = &_query;
+    plugin->before_update = &_before_update;
     plugin->update   = &_update;
     plugin->get_desc = &_get_desc;
     plugin->get_text = &_get_text;
@@ -156,7 +184,8 @@ _connect(ep_priv_t p) {
             }
             
             p->stdin_fd  = in_pfd[1];
-            p->stdout_fd = out_pfd[0];        
+            p->stdout_fd = out_pfd[0];
+            p->ready = 1;
             return 0;
         }
         
@@ -188,6 +217,7 @@ _connect(ep_priv_t p) {
             goto err;
         }
 
+        p->ready = 1;
         return 0;
     
       err:
@@ -221,18 +251,58 @@ _reset_for_retry(ep_priv_t p) {
 static ssize_t
 _read(ep_priv_t p, void *buf, size_t size) {
     if (p->type == PL_TYPE_EXEC) {
-        return read(p->stdout_fd, buf, size);
+        int r = read(p->stdout_fd, buf, size);
+        if (r == -1) return -errno;
+        else return r;
     } else if (p->type == PL_TYPE_SOCK) {
-        return recv(p->conn, buf, size, 0);
+        int r = recv(p->conn, buf, size, 0);
+        if (r == -1) return -errno;
+        else return r;
     } else return -1;
 }
 
 static ssize_t
 _write(ep_priv_t p, const void *buf, size_t size) {
     if (p->type == PL_TYPE_EXEC) {
-        return write(p->stdin_fd, buf, size);
+        int r = write(p->stdin_fd, buf, size);
+        if (r == -1) return -errno;
+        else return r;
     } else if (p->type == PL_TYPE_SOCK) {
-        return send(p->conn, buf, size, 0);
+        int r = send(p->conn, buf, size, 0);
+        if (r == -1) return -errno;
+        else return r;
+    } else return -1;
+}
+
+static int
+_setnonblocking(ep_priv_t p, int nonblocking) {
+    if (p->type == PL_TYPE_SOCK) {
+        int flag = fcntl(p->conn, F_GETFL);
+        if (nonblocking)
+            flag |= O_NONBLOCK;
+        else flag &= ~O_NONBLOCK;
+        fcntl(p->conn, F_SETFL, flag);
+        return 0;
+    } else if (p->type == PL_TYPE_EXEC) {
+        int flag = fcntl(p->stdout_fd, F_GETFL);
+        if (nonblocking)
+            flag |= O_NONBLOCK;
+        else flag &= ~O_NONBLOCK;
+        fcntl(p->stdout_fd, F_SETFL, flag);
+        return 0;
+    } else return -1;
+}
+
+static int
+_register_fd(dl_plugin_t self, ep_priv_t p) {
+    if (p->type == PL_TYPE_SOCK) {
+        _setnonblocking(p, 1);
+        register_update_fd(self, p->conn, DL_FD_EVENT_READ | DL_FD_EVENT_STATUS);
+        return 0;
+    } else if (p->type == PL_TYPE_EXEC) {
+        _setnonblocking(p, 1);
+        register_update_fd(self, p->stdout_fd, DL_FD_EVENT_READ | DL_FD_EVENT_STATUS);
+        return 0;
     } else return -1;
 }
 
@@ -245,29 +315,161 @@ _init(dl_plugin_t self) {
     p->stdout_fd = -1;
 
     p->ts_init_flag = 0;
-    p->filter_count = 0;
+
+    p->ready        = 1;
+    
+    p->item_alloc   = 0;
     p->item_count   = 0;
-    p->recv_buf     = NULL;
+    p->filter_count = 0;
     p->desc         = NULL;
     p->text         = NULL;
     p->filter       = NULL;
+
+    p->recv_buf     = NULL;
+    p->rb_alloc     = 0;
+    p->rb_size      = 0;
+    p->rb_stamp     = 0;
     
     _connect(p);
 }
 
-int
-_update_cache(ep_priv_t p, const char *input) {
-#define CLEAR do { free(p->recv_buf); free(p->desc); free(p->text); free(p->filter); \
-        p->recv_buf = NULL; p->desc = NULL; p->text = NULL; p->filter = NULL; \
-        p->item_count = p->filter_count = 0; } while (0)
+#define CLEAR do { free(p->desc); free(p->text); free(p->filter); free(p->recv_buf); \
+        p->desc = NULL; p->text = NULL; p->filter = NULL; p->recv_buf = NULL; \
+        p->item_alloc = p->item_count = p->filter_count = p->rb_alloc = 0; } while (0)
 
+int
+_update_cache(ep_priv_t p) {
+    if (p->ready) return 0;
+    
+    /* create recv buf */
+    if (!p->recv_buf) {
+        p->recv_buf = (char *)malloc(1024);
+        if (!p->recv_buf) return -1;
+        p->rb_alloc = 1024;
+        p->rb_size = 0;
+        p->rb_stamp = 0;
+    }
+
+    DEBUG(fprintf(stderr, "uc: recv\n"));
+
+    /* read as much data as possible */
+    char buf[1024];
+    while (1) {
+        ssize_t r = _read(p, buf, sizeof(buf));
+        /* fprintf(stderr, "recv %d [%s]\n", r, string(buf, r).c_str()); */
+        if (r < 0) {
+            if (r == -EAGAIN || r == -EWOULDBLOCK) {
+                break;
+            } else {
+                CLEAR;
+                _reset_for_retry(p);
+                return -1;
+            }
+        } else if (r == 0) {
+            CLEAR;
+            _reset_for_retry(p);
+            return -1;
+        }
+
+        while (p->rb_alloc < p->rb_size + r) {
+            p->recv_buf = (char *)realloc(p->recv_buf, p->rb_alloc << 1);
+            if (p->recv_buf == NULL) {
+                CLEAR;
+                _reset_for_retry(p);
+                return -1;
+            } else p->rb_alloc <<= 1;
+        }
+
+        memcpy(p->recv_buf + p->rb_size, buf, r);
+        p->rb_size += r;
+        
+        if (buf[r - 1] == '\0') {
+            break;
+        }
+    }
+
+    /* create item and filter space */
+    if (p->item_alloc == 0) {
+        p->text   = malloc(sizeof(int) * 16);
+        p->desc   = malloc(sizeof(int) * 16);
+        p->filter = malloc(sizeof(int) * 16);
+
+        if (!p->text || !p->desc || !p->filter) {
+            free(p->text); p->text = NULL;
+            free(p->desc); p->desc = NULL;
+            free(p->filter); p->filter = NULL;
+            return -1;
+        }
+
+        p->item_alloc = 16;
+        p->item_count = p->filter_count = 0;
+        
+    }
+
+    DEBUG(fprintf(stderr, "uc: parse %d %d\n", p->rb_stamp, p->rb_size));
+
+    char *f = NULL, *s = NULL;
+    char *c;
+    for (c = p->recv_buf + p->rb_stamp; c < p->recv_buf + p->rb_size; ++ c) {
+        if (*c == '\n') {
+            if (!f) {
+                f = c + 1;
+            } else {
+                /* change newline to null */
+                *(f - 1) = 0;
+                *c = 0;
+
+                /* find two lines, add item */
+                s = f;
+                f = p->recv_buf + p->rb_stamp;
+                
+                DEBUG(fprintf(stderr, "find lines:\n%s\n%s\n", f, s));
+
+                while (p->item_alloc <= p->item_count) {
+                    p->text   = realloc(p->text, sizeof(int) * (p->item_alloc << 1));
+                    p->desc   = realloc(p->desc, sizeof(int) * (p->item_alloc << 1));
+                    p->filter = realloc(p->filter, sizeof(int) * (p->item_alloc << 1));
+
+                    if (!p->text || !p->desc || !p->filter) {
+                        free(p->text); p->text = NULL;
+                        free(p->desc); p->desc = NULL;
+                        free(p->filter); p->filter = NULL;
+                        p->item_alloc = 0;
+                        return -1;
+                    }
+
+                    p->item_alloc <<= 1;
+                }
+
+                int id = p->item_count ++;
+                ++ p->filter_count;
+                
+                p->desc[id]   = f - p->recv_buf;
+                p->text[id]   = s - p->recv_buf;
+                p->filter[id] = id;
+                
+                f = s = NULL;
+                p->rb_stamp = c - p->recv_buf + 1;
+            }
+        } else if (*c == 0) {
+            p->ready = 1;
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+int
+_new_query(ep_priv_t p, const char *input) {
     if (_connect(p) != 0) {
         CLEAR;
         _reset_for_retry(p);
         return;
     }
 
-    // fprintf(stderr, "connected\n");
+    DEBUG(fprintf(stderr, "connected\n"));
+    _setnonblocking(p, 0);
 
     // send query prefix
     if (_write(p, "q", 1) != 1) {
@@ -297,126 +499,82 @@ _update_cache(ep_priv_t p, const char *input) {
         return;
     }
 
-    // fprintf(stderr, "sent\n");
+    DEBUG(fprintf(stderr, "sent %d\n", p->ready));
 
-    // recv output
-    unsigned int _recv_buf_size = 1024;
-    unsigned int _recv_buf_ptr  = 0;
-    char *_recv_buf = (char *)malloc(sizeof(char) * _recv_buf_size);
-
-    if (_recv_buf == NULL) {
-        CLEAR;
-        _reset_for_retry(p);
-    }
-
-    char buf[1024];
-    while (1) {
-        ssize_t r = _read(p, buf, sizeof(buf));
-        // fprintf(stderr, "recv %d [%s]\n", r, string(buf, r).c_str());
-        if (r < 0) {
+    while (!p->ready) {
+        if (_update_cache(p)) {
             CLEAR;
             _reset_for_retry(p);
-            free(_recv_buf);
             return;
-        } else if (r == 0) {
-            _reset_for_retry(p);
-            break;
         }
-
-        while (_recv_buf_size < _recv_buf_ptr + r) {
-            _recv_buf = (char *)realloc(_recv_buf, _recv_buf_size << 1);
-            if (_recv_buf == NULL) {
-                CLEAR;
-                _reset_for_retry(p);
-                return;
-            } else _recv_buf_size <<= 1;
-        }
-
-        memcpy(_recv_buf + _recv_buf_ptr, buf, r);
-        _recv_buf_ptr += r;
-        
-        if (buf[r - 1] == '\0') break;
     }
 
-    /* fprintf(stderr, "recv\n"); */
-    /* fprintf(stderr, "%s\n", _recv_buf); */
+    /* start new query */
+    p->ready = 0;
 
-    char *line_start = _recv_buf;
-    char *line_end = line_start;
+    DEBUG(fprintf(stderr, "recv\n"));
     
-    int  pos = -1;
-    char line_end_c = -1;
-    for (line_start = line_end = _recv_buf; line_end_c; line_start = (++ line_end)) {
-        // find current line
-        while (*line_end && *line_end != '\n') ++ line_end;
-        line_end_c = *line_end;
-        *line_end = 0;
-        if (line_start == line_end) continue;
-        if (pos == -1) {
-            if (!strcmp(line_start, "filter")) {
-                // reuse the old candidates
-                int i, input_len = strlen(input);
-                p->filter_count = 0;
-                for (i = 0; i < p->item_count; ++ i) {
-                    if (!strncmp(p->text[i], input, input_len))
-                        p->filter[p->filter_count ++] = i;
-                }
-                free(_recv_buf);
-                return;
-            } else if (!strcmp(line_start, "clear")) {
-                CLEAR;
-                // rebuild the candidates
-                pos = 0;
-            } else {
-                CLEAR;
-                free(_recv_buf);
-                return;
-            }
-        } else if (pos == 0) {
-            pos = 1;
-        } else {
-            ++ p->item_count;
-            pos = 0;
-        }
-    }
-
-    p->desc   = (char **)malloc(sizeof(char *) * p->item_count);
-    p->text   = (char **)malloc(sizeof(char *) * p->item_count);
-    p->filter = (int *)malloc(sizeof(int) * p->item_count);
-
-    if (!p->desc || !p->text || !p->filter) {
+    // recv reply
+    char reply;
+    if (_read(p, &reply, 1) != 1) {
         CLEAR;
         _reset_for_retry(p);
-        free(_recv_buf);
         return;
     }
 
-    int i;
-    char *ptr = _recv_buf; ptr += strlen(ptr) + 1; /* skip header */
-    for (i = 0; i < p->item_count; ++ i) {
-        p->desc[i] = ptr; ptr += strlen(ptr) + 1;
-        p->text[i] = ptr; ptr += strlen(ptr) + 1;
-        p->filter[i] = i;
-    }
+    DEBUG(fprintf(stderr, "reply %c\n", reply));
 
-    p->recv_buf = _recv_buf;
-    p->filter_count = p->item_count;
-#undef CLEAR    
+    if (reply == 'f') {
+        // reuse the old candidates
+        int i, input_len = strlen(input);
+        p->filter_count = 0;
+        for (i = 0; i < p->item_count; ++ i) {
+            if (!strncmp(p->recv_buf + p->text[i], input, input_len))
+                p->filter[p->filter_count ++] = i;
+        }
+        p->ready = 1;
+        return;
+    } else if (reply == 'c') {
+        CLEAR;
+        /* rebuild the candidates */
+        if (!p->async) {
+            DEBUG(fprintf(stderr, "sync recving data\n"));
+            /* sync building */
+            while (!p->ready) {
+                if (_update_cache(p)) {
+                    CLEAR;
+                    _reset_for_retry(p);
+                    return;
+                }
+            }
+        }
+        return;
+    } else {
+        /* invalid reply */
+        CLEAR;
+        p->ready = 1;
+        _reset_for_retry(p);
+        return;
+    }
 }
 
 static void
 _send_cmd(ep_priv_t p, const char *cmd, int mode) {
     if (_connect(p) != 0) {
+        CLEAR;
         _reset_for_retry(p);
         return;
     }
+
+    // fprintf(stderr, "connected\n");
+    _setnonblocking(p, 0);
 
     // send command prefix
     if (_write(p, mode ? "O" : "o", 1) != 1) {
         _reset_for_retry(p);
         return;
     }
-
+    
     // send input
     const char *cur = cmd;
     const char *end = cmd + strlen(cmd);
@@ -436,37 +594,71 @@ _send_cmd(ep_priv_t p, const char *cmd, int mode) {
         return;
     }
 
-    // fprintf(stderr, "sent\n");
+    // fprintf(stderr, "cmd sent\n");
     return;
 }
 
 int
-_update(dl_plugin_t self, const char *input) {
+_query(dl_plugin_t self, const char *input) {
     ep_priv_t p = (ep_priv_t)self->priv;
-    _update_cache(p, input);
+    _new_query(p, input);
     self->item_count = p->filter_count;
-    self->item_default_sel = -1;
+    DEBUG(fprintf(stderr, "!!! %d\n", self->item_count));
+}
+
+int
+_before_update(dl_plugin_t self) {
+    ep_priv_t p = (ep_priv_t)self->priv;
+    if (!p->ready && p->async) {
+        DEBUG(fprintf(stderr, "add hook\n"));
+        _register_fd(self, p);
+    }
+}
+
+int
+_update(dl_plugin_t self) {
+    ep_priv_t p = (ep_priv_t)self->priv;
+    if (!p->ready) {
+        if (_update_cache(p)) {
+            CLEAR;
+            _reset_for_retry(p);
+            return -1;
+        } else {
+            self->item_count = p->filter_count;
+        }
+    }
+    DEBUG(fprintf(stderr, "!!! %d\n", self->item_count));
     return 0;
 }
 
 int
 _get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr) {
     ep_priv_t p = (ep_priv_t)self->priv;
-    *output_ptr = p->desc[p->filter[index]];
-    return 0;
+    if (index < 0 || index >= p->filter_count) {
+        *output_ptr = "";
+        return -1;
+    } else {
+        *output_ptr = p->recv_buf + p->desc[p->filter[index]];
+        return 0;
+    }
 }
 
 int
 _get_text(dl_plugin_t self, unsigned int index, const char **output_ptr) {
     ep_priv_t p = (ep_priv_t)self->priv;
-    *output_ptr = p->text[p->filter[index]];
-    return 0;
+    if (index < 0 || index >= p->filter_count) {
+        *output_ptr = "";
+        return -1;
+    } else {
+        *output_ptr = p->recv_buf + p->text[p->filter[index]];
+        return 0;
+    }
 }
 
 int
 _open(dl_plugin_t self, int index, const char *input, int mode) {
     ep_priv_t p = (ep_priv_t)self->priv;
     if (index >= 0 && index < p->filter_count)
-        _send_cmd(p, p->text[p->filter[index]], mode);
+        _send_cmd(p, p->recv_buf + p->text[p->filter[index]], mode);
     else _send_cmd(p, input, mode);
 }
