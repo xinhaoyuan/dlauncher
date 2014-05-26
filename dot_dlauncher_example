@@ -4,7 +4,7 @@
 # environment are expanded by bash before passing
 
 -fn
-Consolas-12
+Monospace-12
 
 # uncomment to activate zsh completion
 #-pl
