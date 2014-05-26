@@ -621,15 +621,16 @@ keypress(XKeyEvent *ev) {
 	case XK_Return:
 	case XK_KP_Enter:
         if (cur_plugin == &plugin_summary) {
-            if (sel_index >= 0 && sel_index < cur_plugin->item_count) {
+            if (sel_index < 0) sel_index = 0;
+            if (sel_index < cur_plugin->item_count) {
                 const char *_text;
                 cur_plugin->get_text(cur_plugin, sel_index, &_text);
                 strncpy(text, _text, sizeof text);
                 cursor = strlen(text);
                 cur_plugin = plugin_entry[psummary_index[sel_index]];
                 update(0);
-                return;
             }
+            return;
         } else if (cur_plugin) {
             if (sel_index >= 0 && sel_index < cur_plugin->item_count) {
                 const char *_text;
@@ -994,7 +995,8 @@ hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_p
 
 int
 hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode) {
-    if (index < 0 || index >= self->item_count) {
+    if (index < 0) index = 0;
+    if (index >= self->item_count) {
         fprintf(stderr, "open out of bound\n");
         return 1;
     }
