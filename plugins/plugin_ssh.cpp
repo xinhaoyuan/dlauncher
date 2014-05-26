@@ -99,7 +99,8 @@ update_cache(void) {
     cache.resize(distance(cache.begin(), it));
 }
 
-static int _update(dl_plugin_t self, const char *input) {
+static int
+_query(dl_plugin_t self, const char *input) {
     update_cache();
     priv_s *p = (priv_s *)self->priv;
     
@@ -123,9 +124,6 @@ static int _update(dl_plugin_t self, const char *input) {
     p->candidates.insert(p->candidates.end(), comp_contain.begin(), comp_contain.end());
 
     self->item_count = p->candidates.size();
-    if (self->item_count > 0)
-        self->item_default_sel = 0;
-    else self->item_default_sel = -1;
     return 0;
 }
 
@@ -163,9 +161,10 @@ static __attribute__((constructor)) void _register(void) {
     _self.name       = "ssh";
     _self.priority   = 80;
     _self.item_count = 0;
-    _self.item_default_sel = 0;
     _self.init       = &_init;
-    _self.update     = &_update;
+    _self.query      = &_query;
+    _self.before_update = NULL;
+    _self.update     = NULL;
     _self.get_desc   = &_get_desc;
     _self.get_text   = &_get_text;
     _self.open       = &_open;

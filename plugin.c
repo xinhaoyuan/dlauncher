@@ -460,7 +460,7 @@ _update_cache(ep_priv_t p) {
     return 0;
 }
 
-int
+static void
 _new_query(ep_priv_t p, const char *input) {
     if (_connect(p) != 0) {
         CLEAR;
@@ -604,6 +604,7 @@ _query(dl_plugin_t self, const char *input) {
     _new_query(p, input);
     self->item_count = p->filter_count;
     DEBUG(fprintf(stderr, "!!! %d\n", self->item_count));
+    return 0;
 }
 
 int

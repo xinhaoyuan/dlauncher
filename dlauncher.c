@@ -31,7 +31,7 @@
 #define MIN(a,b)              ((a) < (b) ? (a) : (b))
 #define MAX(a,b)              ((a) > (b) ? (a) : (b))
 
-static void calcoffsets(void);
+static void calc_offsets(void);
 static void item_sel_next(void);
 static void complete_text(int update);
 static char *cistrstr(const char *s, const char *sub);
@@ -39,7 +39,7 @@ static void drawmenu(void);
 static void grabkeyboard(void);
 static void insert(const char *str, ssize_t n);
 static void keypress(XKeyEvent *ev);
-static void update(int lock, int query);
+static void update(int query);
 static size_t nextrune(int inc);
 static void paste(void);
 static void run(void);
@@ -107,11 +107,44 @@ static XIC xic;
 
 #define NPLUGIN 200
 
-static unsigned int plugin_count = 1; /* hist plugin preserved */
+static unsigned int plugin_count = 0;
 static dl_plugin_t  plugin_entry[NPLUGIN];
 static int          plugin_update[NPLUGIN];
 
-static int cur_plugin;
+/* for modifying title */
+static int          pt_begin[NPLUGIN];
+static int          pt_end[NPLUGIN];
+
+static const char  *psummary_desc[NPLUGIN];
+static const char  *psummary_text[NPLUGIN];
+static int          psummary_index[NPLUGIN];
+
+static int psummary_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr) {
+    *output_ptr = psummary_desc[psummary_index[index]];
+    return 0;
+}
+
+static int psummary_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr) {
+    *output_ptr = psummary_text[psummary_index[index]];
+    return 0;
+}
+
+static dl_plugin_s plugin_summary = {
+    .id            = -1,
+    .priv          = NULL,
+    .name          = "DLauncher-"VERSION,
+    .priority      = 0,
+    .init          = NULL,
+    .query         = NULL,
+    .before_update = NULL,
+    .update        = NULL,
+    .get_desc      = &psummary_get_desc,
+    .get_text      = &psummary_get_text,
+    .open          = NULL
+};
+
+
+static dl_plugin_t cur_plugin;
 static int cur_pindex, prev_pindex, next_pindex, sel_index;
 
 int
@@ -274,8 +307,7 @@ main(int argc, char *argv[]) {
     normcol = initcolor(dc, normfgcolor, normbgcolor);
 	selcol = initcolor(dc, selfgcolor, selbgcolor);
 
-    plugin_entry[0] = &hist_plugin;
-    plugin_entry[0]->id = 0;
+    register_plugin(&hist_plugin);
     
     setup();
 
@@ -287,14 +319,16 @@ main(int argc, char *argv[]) {
         plugin_entry[i]->init(plugin_entry[i]);
     }
 
+    cur_plugin = &plugin_summary;
+
 	run();
 
 	return 1; /* unreachable */
 }
 
 void
-calcoffsets(void) {
-    if (cur_plugin < 0) {
+calc_offsets(void) {
+    if (!cur_plugin) {
         cur_pindex = prev_pindex = next_pindex = 0;
         return;
     }
@@ -306,12 +340,12 @@ calcoffsets(void) {
 	else
 		n = mw - (promptw + inputw + textw(dc, "<") + textw(dc, ">"));
     
-	/* calculate which items will begin the next page and previous page */
+	/* calculate which items will begin the next page and previous page */    
 	for(i = 0, next_pindex = cur_pindex;
-        next_pindex < plugin_entry[cur_plugin]->item_count;
+        next_pindex < cur_plugin->item_count;
         ++ next_pindex) {
         const char *_text;
-        plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], next_pindex, &_text);
+        cur_plugin->get_desc(cur_plugin, next_pindex, &_text);
         int tw = textw(dc, _text);
 		if((i += (lines > 0) ? bh : MIN(tw, n)) > n)
 			break;
@@ -319,7 +353,7 @@ calcoffsets(void) {
 
 	for(i = 0, prev_pindex = cur_pindex - 1; prev_pindex > 0; -- prev_pindex) {
         const char *_text;
-        plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], prev_pindex, &_text);
+        cur_plugin->get_desc(cur_plugin, prev_pindex, &_text);
         int tw = textw(dc, _text);
 		if((i += (lines > 0) ? bh : MIN(tw, n)) > n) {
             ++ prev_pindex;
@@ -353,6 +387,19 @@ drawmenu(void) {
 	dc->h = bh;
 	drawrect(dc, 0, 0, mw, mh, True, normcol->BG);
 
+    if (cur_plugin == &plugin_summary) {
+        int i;
+        for (i = 0; i < plugin_count; ++ i) {
+            if (pt_begin[i] < 0) continue;
+            prompt_buf[pt_begin[i]] = ' ';
+            prompt_buf[pt_end[i]] = ' ';
+        }
+        if (sel_index >= 0 && sel_index < plugin_summary.item_count) {
+            prompt_buf[pt_begin[psummary_index[sel_index]]] = '(';
+            prompt_buf[pt_end[psummary_index[sel_index]]] = ')';
+        }
+    }
+
 	if (prompt) {
         promptw = textw(dc, prompt);
 		dc->w = promptw;
@@ -364,23 +411,23 @@ drawmenu(void) {
     inputw = MIN(mw / 2, inputw);
     
 	/* draw input field */
-	dc->w = (lines > 0 || cur_plugin < 0) ? mw - dc->x : inputw;
+	dc->w = (lines > 0 || !cur_plugin) ? mw - dc->x : inputw;
 	drawtext(dc, text, normcol);
 	if((curpos = textnw(dc, text, cursor) + dc->h/2 - 2) < dc->w)
 		drawrect(dc, curpos, 2, 1, dc->h - 4, True, normcol->FG);
 
-	if(lines > 0 && cur_plugin >= 0) {
+	if(lines > 0 && cur_plugin) {
 		/* draw vertical list */
         dc->x = 0;
 		dc->w = mw;
 		for(index = cur_pindex; index != next_pindex; ++ index) {
 			dc->y += dc->h;
             const char *_text;
-            plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], index, &_text);            
+            cur_plugin->get_desc(cur_plugin, index, &_text);            
 			drawtext(dc, _text,
                      (index == sel_index) ? selcol : normcol);
 		}
-	} else if(cur_plugin >= 0) {
+	} else if (cur_plugin) {
 		/* draw horizontal list */
 		dc->x += inputw;
 		dc->w = textw(dc, "<");
@@ -388,7 +435,7 @@ drawmenu(void) {
 			drawtext(dc, "<", normcol);
 		for(index = cur_pindex; index != next_pindex; ++ index) {
             const char *_text;
-            plugin_entry[cur_plugin]->get_desc(plugin_entry[cur_plugin], index, &_text);            
+            cur_plugin->get_desc(cur_plugin, index, &_text);            
 
             int tw = textw(dc, _text);
 			dc->x += dc->w;
@@ -398,7 +445,7 @@ drawmenu(void) {
 		}
 		dc->w = textw(dc, ">");
 		dc->x = mw - dc->w;
-		if(next_pindex < plugin_entry[cur_plugin]->item_count)
+		if(next_pindex < cur_plugin->item_count)
 			drawtext(dc, ">", normcol);
 	}
 	mapdc(dc, win, mw, mh);
@@ -427,7 +474,7 @@ insert(const char *str, ssize_t n) {
 	if(n > 0)
 		memcpy(&text[cursor], str, n);
 	cursor += n;
-    update(1, 1);
+    update(1);
 }
 
 void
@@ -480,19 +527,19 @@ keypress(XKeyEvent *ev) {
 		}
 	else if(ev->state & Mod1Mask)
 		switch(ksym) {
-		case XK_g: ksym = XK_Home;  break;
-		case XK_G: ksym = XK_End;   break;
+		case XK_g:     ksym = XK_Home;  break;
+		case XK_G:     ksym = XK_End;   break;
         case XK_a:
-		case XK_h: ksym = XK_Up;    break;
+		case XK_h:     ksym = XK_Up;    break;
         case XK_d:
-		case XK_l: ksym = XK_Down;  break;
-		case XK_j: ksym = XK_Next;  break;
-		case XK_k: ksym = XK_Prior; break;
+		case XK_l:     ksym = XK_Down;  break;
+		case XK_j:     ksym = XK_Next;  break;
+		case XK_k:     ksym = XK_Prior; break;
         case XK_r:
-        case XK_R: ksym = XK_Return; break;
-        case XK_Tab:  plugin_cycle_next(); return;
+        case XK_R:     ksym = XK_Return; break;
+        case XK_Tab:   plugin_cycle_next(); return;
         case XK_w:
-        case XK_Up:   hist_show_prev(); return;
+        case XK_Up:    hist_show_prev(); return;
         case XK_s:
         case XK_Down:  hist_show_next(); return;
         case XK_slash: complete_text(0); return;
@@ -519,11 +566,11 @@ keypress(XKeyEvent *ev) {
 			cursor = strlen(text);
 			break;
 		}
-        if (cur_plugin >= 0) {
-            cur_pindex = plugin_entry[cur_plugin]->item_count;
-            calcoffsets();
+        if (cur_plugin) {
+            cur_pindex = cur_plugin->item_count;
+            calc_offsets();
             sel_index = cur_pindex = prev_pindex;
-            calcoffsets();
+            calc_offsets();
         }
 		break;
 	case XK_Escape:
@@ -531,15 +578,15 @@ keypress(XKeyEvent *ev) {
         return;
         
 	case XK_Home:
-		if (cur_plugin < 0 || sel_index < 0 || sel_index == 0) {
+		if (!cur_plugin || sel_index < 0 || sel_index == 0) {
 			cursor = 0;
 			break;
 		}
 		sel_index = cur_pindex = 0;
-		calcoffsets();
+		calc_offsets();
 		break;
 	case XK_Left:
-		if(cursor > 0 && (cur_plugin < 0 || sel_index < 0 || sel_index == 0 || lines > 0)) {
+		if(cursor > 0 && (!cur_plugin || sel_index < 0 || sel_index == 0 || lines > 0)) {
 			cursor = nextrune(-1);
 			break;
 		}
@@ -547,42 +594,52 @@ keypress(XKeyEvent *ev) {
 			return;
 		/* fallthrough */
 	case XK_Up:
-        if (cur_plugin < 0) break;
+        if (!cur_plugin) break;
         if (sel_index < 0) sel_index = cur_pindex;
         else if (sel_index > 0)
             -- sel_index;
         if (sel_index < cur_pindex &&
             prev_pindex >= 0) {
             cur_pindex = prev_pindex;
-            calcoffsets();
+            calc_offsets();
         }
 		break;
 	case XK_Next:
-		if(cur_plugin < 0 ||
-           next_pindex >= plugin_entry[cur_plugin]->item_count)
+		if(!cur_plugin ||
+           next_pindex >= cur_plugin->item_count)
 			return;
 		sel_index = cur_pindex = next_pindex;
-		calcoffsets();
+		calc_offsets();
 		break;
 	case XK_Prior:
-		if(cur_plugin < 0 ||
+		if(!cur_plugin ||
            prev_pindex < 0)
 			return;
 		sel_index = cur_pindex = prev_pindex;
-		calcoffsets();
+		calc_offsets();
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
-		if (cur_plugin >= 0) {
-            if (sel_index >= 0 && sel_index < plugin_entry[cur_plugin]->item_count) {
+        if (cur_plugin == &plugin_summary) {
+            if (sel_index >= 0 && sel_index < cur_plugin->item_count) {
                 const char *_text;
-                plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
-                hist_add(plugin_entry[cur_plugin]->name, _text);
-                plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], sel_index, _text, !!(ev->state & ShiftMask));
+                cur_plugin->get_text(cur_plugin, sel_index, &_text);
+                strncpy(text, _text, sizeof text);
+                cursor = strlen(text);
+                cur_plugin = plugin_entry[psummary_index[sel_index]];
+                update(0);
+                return;
+            }
+        } else if (cur_plugin) {
+            if (sel_index >= 0 && sel_index < cur_plugin->item_count) {
+                const char *_text;
+                cur_plugin->get_text(cur_plugin, sel_index, &_text);
+                hist_add(cur_plugin->name, _text);
+                cur_plugin->open(cur_plugin, sel_index, _text, !!(ev->state & ShiftMask));
             } else {
                 /* no selected item */
-                hist_add(plugin_entry[cur_plugin]->name, text);
-                plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], -1, text, !!(ev->state & ShiftMask));
+                hist_add(cur_plugin->name, text);
+                cur_plugin->open(cur_plugin, -1, text, !!(ev->state & ShiftMask));
             }
         }
         hide();
@@ -606,26 +663,26 @@ void
 item_sel_next(void) {
     if (cur_plugin < 0) return;
     if (sel_index < 0) sel_index = cur_pindex;
-    else if (sel_index + 1 < plugin_entry[cur_plugin]->item_count) {
+    else if (sel_index + 1 < cur_plugin->item_count) {
         ++ sel_index;
         if (sel_index == next_pindex &&
-            next_pindex < plugin_entry[cur_plugin]->item_count) {
+            next_pindex < cur_plugin->item_count) {
             cur_pindex = next_pindex;
-            calcoffsets();
+            calc_offsets();
         }
     } else {
         sel_index = cur_pindex = 0;
-        calcoffsets();
+        calc_offsets();
     }
 
 }
 
 void
 complete_text(int to_update) {
-    if (cur_plugin < 0 || plugin_entry[cur_plugin]->item_count == 0)
+    if (!cur_plugin || cur_plugin->item_count == 0)
         return;
     if (sel_index < 0 ||
-        sel_index >= plugin_entry[cur_plugin]->item_count)
+        sel_index >= cur_plugin->item_count)
         sel_index = 0;
 
     const char *_text;
@@ -633,7 +690,7 @@ complete_text(int to_update) {
     if (to_update == 0) {
         int moved = 0;
         while (1) {
-            plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+            cur_plugin->get_text(cur_plugin, sel_index, &_text);
             if (!strcmp(text, _text) && !moved) {
                 item_sel_next();
                 moved = 1;
@@ -645,19 +702,25 @@ complete_text(int to_update) {
         }
         drawmenu();
     } else {
-        plugin_entry[cur_plugin]->get_text(plugin_entry[cur_plugin], sel_index, &_text);
+        cur_plugin->get_text(cur_plugin, sel_index, &_text);
         strncpy(text, _text, sizeof text);
         cursor = strlen(text);
-        update(1, 1);
+        update(1);
     }
 }
 
+static int
+psummary_comp(const void *a, const void *b) {
+    int pa = plugin_entry[*(int *)a]->priority;
+    int pb = plugin_entry[*(int *)b]->priority;
+    /* larger priority first */
+    return (pb - pa);
+}
+
 void
-update(int lock, int query) {
+update(int query) {
     char *prompt_ptr = prompt_buf;
-    char *prompt_sel_begin = prompt_buf, *prompt_sel_end = prompt_buf;
-    int  plugin_best = -1;
-    char *prompt_best_begin = prompt_buf, *prompt_best_end = prompt_buf;
+    int   plugin_best = -1;
 
     prompt = prompt_empty;
     char *plugin_filter = strchr(text, ':');
@@ -667,57 +730,69 @@ update(int lock, int query) {
         *plugin_filter = 0;
     }
 
-    if (!lock && cur_plugin >= 0 && plugin_entry[cur_plugin]->priority < 0)
-        cur_plugin = -1;
-
     int p;
+    plugin_summary.item_count = 0;
     for (p = 0; p < plugin_count; ++ p) {
         if (plugin_filter && strstr(plugin_entry[p]->name, text) == NULL) goto skip;
         if (query) {
             if (plugin_entry[p]->query(plugin_entry[p], input)) goto skip;
         }
-        if (plugin_entry[p]->item_count == 0 &&
-            (!lock || p != cur_plugin)) goto skip;
+
+        if (plugin_entry[p]->item_count > 0) {
+            plugin_entry[p]->get_desc(plugin_entry[p],
+                                      0, &psummary_desc[p]);
+            plugin_entry[p]->get_text(plugin_entry[p],
+                                      0, &psummary_text[p]);
+            psummary_index[plugin_summary.item_count] = p;
+            ++ plugin_summary.item_count;
+        }
         
-        if (cur_plugin == p) prompt_sel_begin = prompt_ptr;
+        pt_begin[p] = prompt_ptr - prompt_buf;
         int w = snprintf(prompt_ptr, sizeof(prompt_buf) - (prompt_ptr - prompt_buf),
                          " %s ", plugin_entry[p]->name);
         prompt_ptr += w - 1;
-        if (cur_plugin == p) prompt_sel_end = prompt_ptr;
+        pt_end[p] = prompt_ptr - prompt_buf;
 
-        if (plugin_best == -1 || plugin_entry[p]->priority > plugin_entry[plugin_best]->priority) {
+        if (plugin_best == -1 ||
+            plugin_entry[p]->priority > plugin_entry[plugin_best]->priority) {
             plugin_best = p;
-            prompt_best_begin = prompt_ptr - w + 1;
-            prompt_best_end = prompt_ptr;
         }
 
         plugin_entry[p]->enabled = 1;
         continue;
 
       skip:
-        fprintf(stderr, "skip %d\n", p);
-        /* current plugin no longer available */
+        pt_begin[p] = pt_end[p] = -1;
         plugin_entry[p]->enabled = 0;
-        if (cur_plugin == p) cur_plugin = -1;
+        if (cur_plugin == plugin_entry[p]) cur_plugin = NULL;
     }
 
     if (plugin_filter) *plugin_filter = ':';
-    
-    if (cur_plugin < 0) {
-        cur_plugin = plugin_best;
-        prompt_sel_begin = prompt_best_begin;
-        prompt_sel_end = prompt_best_end;
+
+    if (!cur_plugin) {
+        cur_plugin = plugin_entry[plugin_best];
     }
+
+    prompt = prompt_buf;
     
-    if (cur_plugin >= 0) {
-        *prompt_sel_begin = '[';
-        *prompt_sel_end   = ']';
+    if (cur_plugin == &plugin_summary) {
+        qsort(psummary_index,
+              plugin_summary.item_count, sizeof(int),
+              psummary_comp);
+        
+        cur_pindex = 0;
+        sel_index = -1;
+
+        calc_offsets();
+        
+    } else if (cur_plugin && cur_plugin->id >= 0) {
+        prompt_buf[pt_begin[cur_plugin->id]] = '[';
+        prompt_buf[pt_end[cur_plugin->id]] = ']';
 
         cur_pindex = 0;
         sel_index = -1;
-        prompt = prompt_buf;
 
-        calcoffsets();
+        calc_offsets();
     }
 
     drawmenu();
@@ -850,7 +925,7 @@ hist_apply(const char *line) {
         /* for completely matching */
         if (strncmp(plugin_entry[p_index]->name, line, len) == 0 &&
             line[len] == ':') {
-            cur_plugin = p_index;
+            cur_plugin = plugin_entry[p_index];
             strncpy(text, line + len + 1, sizeof text);
             cursor = strlen(text);
             break;
@@ -864,7 +939,7 @@ hist_show_prev(void) {
     if (hist_index == -1) return;
     if (hist_index > 0) -- hist_index;
     hist_apply(hist_line[hist_index]);
-    update(0, 1);
+    update(1);
 }
 
 void
@@ -873,7 +948,7 @@ hist_show_next(void) {
     if (hist_index == -1) return;
     if (hist_index < hist_count - 1) ++ hist_index;
     hist_apply(hist_line[hist_index]);
-    update(0, 1);
+    update(1);
 }
 
 int
@@ -925,10 +1000,9 @@ hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode) {
     }
 
     hist_apply(hist_line_matched[index]);
-    if (cur_plugin >= 1)        /* not hist itself */
-    {
-        hist_add(plugin_entry[cur_plugin]->name, text);
-        plugin_entry[cur_plugin]->open(plugin_entry[cur_plugin], -1, text, mode);
+    if (cur_plugin != self) {
+        hist_add(cur_plugin->name, text);
+        cur_plugin->open(cur_plugin, -1, text, mode);
     }
 	return 0;
 }
@@ -1027,7 +1101,8 @@ run(void) {
         fd_size = 0;
         for (i = 0; i < plugin_count; ++ i) {
             plugin_update[i] = 0;
-            plugin_entry[i]->before_update(plugin_entry[i]);
+            if (plugin_entry[i]->before_update)
+                plugin_entry[i]->before_update(plugin_entry[i]);
         }
 
         select(max_fd + 1, &in_fds, &out_fds, &stat_fds, &tv);
@@ -1052,7 +1127,10 @@ run(void) {
             }
         }
 
-        if (showed && to_update) update(1, 0);
+        if (showed && to_update) {
+            update(0);
+        }
+            
     }
 }
 
@@ -1140,23 +1218,25 @@ setup(void) {
 
 void
 plugin_cycle_next(void) {
-    if (cur_plugin < 0) return;
-    int p = (cur_plugin + 1) % plugin_count;
-    while (p != cur_plugin && !plugin_entry[p]->enabled)
+    if (!cur_plugin || cur_plugin->id < 0) return;
+    int id = cur_plugin->id;
+    int p = (id + 1) % plugin_count;
+    while (p != id && !plugin_entry[p]->enabled)
         p = (p + 1) % plugin_count;
-    cur_plugin = p;
-    update(1, 0);
+    cur_plugin = plugin_entry[p];
+    update(0);
 }
 
 void
 plugin_cycle_prev(void) {
-    if (cur_plugin < 0) return;
+    if (!cur_plugin || cur_plugin->id < 0) return;
+    int id = cur_plugin->id;
     int step = plugin_count - 1;
-    int p = (cur_plugin + step) % plugin_count;
-    while (p != cur_plugin && !plugin_entry[p]->enabled)
+    int p = (id + step) % plugin_count;
+    while (p != id && !plugin_entry[p]->enabled)
         p = (p + step) % plugin_count;
-    cur_plugin = p;
-    update(1, 0);
+    cur_plugin = plugin_entry[p];
+    update(0);
 }
 
 void
@@ -1172,7 +1252,7 @@ show(void) {
     XResizeWindow(dc->dpy, win, mw, mh);
     XMapRaised(dc->dpy, win);
 	resizedc(dc, mw, mh);
-	update(0, 1);
+	update(1);
 
     showed = 1;
 }
@@ -1181,7 +1261,7 @@ void
 hide(void) {
     text[0] = 0;
     cursor = 0;
-    cur_plugin = -1;
+    cur_plugin = &plugin_summary;
     prompt = prompt_empty;
     hist_index = -1;
     showed = 0;

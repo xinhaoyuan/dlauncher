@@ -65,12 +65,11 @@ handle-request() {
             lw=$(last-word "$input")
             
             if [[ -n "$input" && "${input:0:${#cached}}" == "$cached" && ! "${input:${#cached}}" =~ .*[\ \'\"/].* ]]; then
-                print -u $connection "filter"
-                print -n -u $connection $'\0'
+                print -n -u $connection "f"
                 break;
             fi
 
-            print -u $connection "clear"
+            print -n -u $connection "c"
             if [[ -n "$input" ]]; then
                 cached_input[$connection]=$input
 		        zpty -w -n z "$input"

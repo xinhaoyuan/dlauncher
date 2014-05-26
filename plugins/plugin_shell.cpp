@@ -20,7 +20,7 @@ using namespace std;
 
 static void _init(dl_plugin_t self) { }
 
-static int _update(dl_plugin_t self, const char *input) {
+static int _query(dl_plugin_t self, const char *input) {
     if (strchr(input, '/') == NULL &&
         strchr(input, ' ') == NULL) {
         self->item_count = 0;
@@ -71,9 +71,10 @@ static __attribute__((constructor)) void _register(void) {
     _self.name       = "sh";
     _self.priority   = -10;
     _self.item_count = 0;
-    _self.item_default_sel = 0;
     _self.init       = &_init;
-    _self.update     = &_update;
+    _self.query      = &_query;
+    _self.before_update = NULL;
+    _self.update     = NULL;
     _self.get_desc   = &_get_desc;
     _self.get_text   = &_get_text;
     _self.open       = &_open;
