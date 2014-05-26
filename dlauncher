@@ -21,10 +21,10 @@ elif [ "$OP" = "start" ]; then
             cd $HOME
             # generate expanded config
             config_fn="/tmp/dl_config_gen_$$"
-            echo "cat <<END_OF_CONFIG" > $config_fn.bash
-            cat $HOME/.dlauncher >> $config_fn.bash
-            echo "END_OF_CONFIG" >> $config_fn.bash
-            bash $config_fn.bash >  $config_fn
+            echo "cat <<END_OF_CONFIG" > $config_fn.sh
+            cat $HOME/.dlauncher >> $config_fn.sh
+            echo "END_OF_CONFIG" >> $config_fn.sh
+            sh $config_fn.sh     >  $config_fn
 
             if [ -r $HOME/.dlauncher ]; then
                 ${WD}/dlauncher.bin -args $config_fn &
