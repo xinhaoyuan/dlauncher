@@ -5,6 +5,7 @@ functions, including but not limited to:
 
  - Dynamic content
  - Plugin (native and external)
+ - Summary
  - History
  - Persistent daemon (wake up by signal)
 
@@ -21,7 +22,6 @@ FYI: zsh plugin may not work on FreeBSD due to a bug on ``zpty''
 
 # TODO
 
- - timed updating mechanism
  - more plugins
 
 Feel free to hack it.
@@ -77,6 +77,7 @@ dlauncher open  - activate the dlauncher ui
      PRIORITY=[priority]      - the plugin priority
      RETRY_CMD=[command line] - command line to be executed when plugin connection failed
      RETRY_DELAY=[seconds]    - do not retry for number of seconds since last retry
+     ASYNC=[any non-empty string] - async mode(experimental)
 
 # External Plugin Protocol
 
