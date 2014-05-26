@@ -574,7 +574,10 @@ keypress(XKeyEvent *ev) {
         }
 		break;
 	case XK_Escape:
-		hide();
+        if (cur_plugin != &plugin_summary) {
+            cur_plugin = &plugin_summary;
+            update(0);
+        } else hide();
         return;
         
 	case XK_Home:
@@ -620,6 +623,7 @@ keypress(XKeyEvent *ev) {
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
+    open:
         if (cur_plugin == &plugin_summary) {
             if (sel_index < 0) sel_index = 0;
             if (sel_index < cur_plugin->item_count) {
@@ -629,6 +633,7 @@ keypress(XKeyEvent *ev) {
                 cursor = strlen(text);
                 cur_plugin = plugin_entry[psummary_index[sel_index]];
                 update(0);
+                goto open;
             }
             return;
         } else if (cur_plugin) {
@@ -702,6 +707,13 @@ complete_text(int to_update) {
             }
         }
         drawmenu();
+    } else if (cur_plugin == &plugin_summary) {
+        const char *_text;
+        cur_plugin->get_text(cur_plugin, sel_index, &_text);
+        strncpy(text, _text, sizeof text);
+        cursor = strlen(text);
+        cur_plugin = plugin_entry[psummary_index[sel_index]];
+        update(0);
     } else {
         cur_plugin->get_text(cur_plugin, sel_index, &_text);
         strncpy(text, _text, sizeof text);
