@@ -1,14 +1,15 @@
 # an example of $HOME/.dlauncher
 # $HOME/.dlauncher contains extra args passed into dlauncher.bin, 
 # one argument per line (empty lines are skipped)
+# environment are expanded by bash before passing
+
 -fn
-Monospace-12
+Consolas-12
 
-# uncomment and modify the following adds zsh completion in dlauncher
-# I admit it's kind of tricky for now - it will be simplified in further
+# uncomment to activate zsh completion
 #-pl
-#zsh:/tmp/dlauncher_zshc-<USER>/socket:TYPE=UNIXSOCK:RETRY_CMD=zsh /usr/local/share/dlauncher/completion-server.zsh /tmp/dlauncher_zshc-<USER>:PRIORITY=40
+#zsh:/tmp/dlauncher_zshc-$USER/socket:TYPE=UNIXSOCK:RETRY_CMD=zsh /usr/local/share/dlauncher/completion-server.zsh /tmp/dlauncher_zshc-$USER:PRIORITY=40
 
-# calculator plugin
+# uncomment to activate calculator
 #-pl
 #calc:zsh /usr/local/share/dlauncher/calc.zsh:TYPE=EXEC:PRIORITY=100

@@ -19,8 +19,15 @@ elif [ "$OP" = "start" ]; then
     if mkdir $LOCK_DIR 2>/dev/null; then 
         (
             cd $HOME
+            # generate expanded config
+            config_fn="/tmp/dl_config_gen_$$"
+            echo "cat <<END_OF_CONFIG" > $config_fn.bash
+            cat $HOME/.dlauncher >> $config_fn.bash
+            echo "END_OF_CONFIG" >> $config_fn.bash
+            bash $config_fn.bash >  $config_fn
+
             if [ -r $HOME/.dlauncher ]; then
-                ${WD}/dlauncher.bin -args $HOME/.dlauncher &
+                ${WD}/dlauncher.bin -args $config_fn &
                 _PID=$!
             else 
                 ${WD}/dlauncher.bin &
