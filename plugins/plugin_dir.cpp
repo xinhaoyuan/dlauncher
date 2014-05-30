@@ -151,6 +151,7 @@ static __attribute__((constructor)) void _register(void) {
     _self.priv       = new priv_s();
     _self.name       = "dir";
     _self.priority   = 40;
+    _self.hist       = 1;
     _self.item_count = 0;
     _self.init       = &_init;
     _self.query      = &_query;

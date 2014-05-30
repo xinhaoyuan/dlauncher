@@ -74,6 +74,7 @@ static dl_plugin_s hist_plugin = {
     .priv          = NULL,
     .name          = "hist",
     .priority      = 100,
+    .hist          = 0,
     .init          = &hist_plugin_init,
     .query         = &hist_plugin_query,
     .before_update = &hist_plugin_before_update,
@@ -134,6 +135,7 @@ static dl_plugin_s plugin_summary = {
     .priv          = NULL,
     .name          = "DLauncher-"VERSION,
     .priority      = 0,
+    .hist          = 0,
     .init          = NULL,
     .query         = NULL,
     .before_update = NULL,
@@ -640,11 +642,11 @@ keypress(XKeyEvent *ev) {
             if (sel_index >= 0 && sel_index < cur_plugin->item_count) {
                 const char *_text;
                 cur_plugin->get_text(cur_plugin, sel_index, &_text);
-                hist_add(cur_plugin->name, _text);
+                if (cur_plugin->hist) hist_add(cur_plugin->name, _text);
                 cur_plugin->open(cur_plugin, sel_index, _text, !!(ev->state & ShiftMask));
             } else {
                 /* no selected item */
-                hist_add(cur_plugin->name, text);
+                if (cur_plugin->hist) hist_add(cur_plugin->name, text);
                 cur_plugin->open(cur_plugin, -1, text, !!(ev->state & ShiftMask));
             }
         }

@@ -70,6 +70,7 @@ static __attribute__((constructor)) void _register(void) {
     _self.priv       = new string();
     _self.name       = "sh";
     _self.priority   = -10;
+    _self.hist       = 1;
     _self.item_count = 0;
     _self.init       = &_init;
     _self.query      = &_query;

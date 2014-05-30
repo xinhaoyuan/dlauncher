@@ -13,6 +13,7 @@ extern "C" {
         int enabled;
         const char *name;
         int priority;
+        int hist;
 
         unsigned int item_count;
         int          cookie;

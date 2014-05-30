@@ -120,13 +120,15 @@ external_plugin_create(const char *name, const char *entry, const char *opt) {
     plugin->name = strdup(name);
     char *pri = _get_opt(opt, "PRIORITY");
     plugin->priority = pri ? atoi(pri) : 0;
-    if (pri) free(pri);
+    free(pri);
+    
+    char *hist = _get_opt(opt, "HIST");
+    plugin->hist = hist && *hist;
+    free(hist);
 
     char *async = _get_opt(opt, "ASYNC");
-    if (async && *async)        /* non empty */
-        p->async = 1;
-    else p->async = 0;
-    if (async) free(async);
+    p->async = async && *async;
+    free(async);
     
     char *retry_delay = _get_opt(opt, "RETRY_DELAY");
     p->retry_delay = retry_delay ? atoi(retry_delay) : 3;
