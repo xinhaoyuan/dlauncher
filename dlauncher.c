@@ -1234,24 +1234,26 @@ setup(void) {
 
 void
 plugin_cycle_next(void) {
-    if (!cur_plugin || cur_plugin->id < 0) return;
-    int id = cur_plugin->id;
+    if (plugin_count == 0) return;
+    int id = (cur_plugin && cur_plugin->id >= 0) ? cur_plugin->id : (plugin_count - 1);
     int p = (id + 1) % plugin_count;
     while (p != id && !plugin_entry[p]->enabled)
         p = (p + 1) % plugin_count;
-    cur_plugin = plugin_entry[p];
+    if (plugin_entry[p]->enabled)
+        cur_plugin = plugin_entry[p];
     update(0);
 }
 
 void
 plugin_cycle_prev(void) {
-    if (!cur_plugin || cur_plugin->id < 0) return;
-    int id = cur_plugin->id;
+    if (plugin_count == 0) return;
+    int id = (cur_plugin && cur_plugin->id >= 0) ? cur_plugin->id : 0;
     int step = plugin_count - 1;
     int p = (id + step) % plugin_count;
     while (p != id && !plugin_entry[p]->enabled)
         p = (p + step) % plugin_count;
-    cur_plugin = plugin_entry[p];
+    if (plugin_entry[p]->enabled)
+        cur_plugin = plugin_entry[p];
     update(0);
 }
 
