@@ -597,7 +597,7 @@ keypress(XKeyEvent *ev) {
                 }
             }
             cur_plugin = &plugin_summary;
-            update(0);
+            update(1);
         } else hide();
         return;
         
