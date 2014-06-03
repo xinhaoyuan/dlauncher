@@ -66,7 +66,8 @@ static int  _before_update (dl_plugin_t self);
 static int  _update   (dl_plugin_t self);
 static int  _get_desc (dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int  _get_text (dl_plugin_t self, unsigned int index, const char **output_ptr);
-static int  _open     (dl_plugin_t self, int index, const char *input, int mode);
+static void _select   (dl_plugin_t self, int index);
+static void _open     (dl_plugin_t self, int index, const char *input, int mode);
 
 static char *_get_opt(const char *opt, const char *name) {
     int name_len = strlen(name);
@@ -94,6 +95,7 @@ static char *_get_opt(const char *opt, const char *name) {
 int
 external_plugin_create(const char *name, const char *entry, const char *opt) {
     ep_priv_t p = (ep_priv_t)malloc(sizeof(ep_priv_s));
+    int i;
     if (!p) return -1;
 
     dl_plugin_t plugin = (dl_plugin_t)malloc(sizeof(dl_plugin_s));
@@ -129,6 +131,24 @@ external_plugin_create(const char *name, const char *entry, const char *opt) {
     char *async = _get_opt(opt, "ASYNC");
     p->async = async && *async;
     free(async);
+
+    char *iprivacy = _get_opt(opt, "IPRIVACY");
+    plugin->input_privacy = DL_INPUT_PRIVACY_PUBLIC;
+    if (iprivacy && !strcmp(iprivacy, "PRIVATE"))
+        plugin->input_privacy = DL_INPUT_PRIVACY_PRIVATE;
+    free(iprivacy);
+
+    char *imask = _get_opt(opt, "IMASK");
+    plugin->input_mask = 0;
+    if (imask) {
+        for (i = 0; i < strlen(imask); ++ i) {
+            if (imask[i] == 'O')
+                plugin->input_mask |= DL_INPUT_EVENT_MASK_OPEN;
+            else if (imask[i] == 'S')
+                plugin->input_mask |= DL_INPUT_EVENT_MASK_SELECT;
+        }
+    }
+    free(imask);    
     
     char *retry_delay = _get_opt(opt, "RETRY_DELAY");
     p->retry_delay = retry_delay ? atoi(retry_delay) : 3;
@@ -152,6 +172,7 @@ external_plugin_create(const char *name, const char *entry, const char *opt) {
     plugin->update   = &_update;
     plugin->get_desc = &_get_desc;
     plugin->get_text = &_get_text;
+    plugin->select   = &_select;
     plugin->open     = &_open;
 
     return register_plugin(plugin);
@@ -561,7 +582,7 @@ _new_query(ep_priv_t p, const char *input) {
 }
 
 static void
-_send_cmd(ep_priv_t p, const char *cmd, int mode) {
+_send_cmd(ep_priv_t p, char cmd, const char *line) {
     if (_connect(p) != 0) {
         CLEAR;
         _reset_for_retry(p);
@@ -572,14 +593,14 @@ _send_cmd(ep_priv_t p, const char *cmd, int mode) {
     _setnonblocking(p, 0);
 
     // send command prefix
-    if (_write(p, mode ? "O" : "o", 1) != 1) {
+    if (_write(p, &cmd, 1) != 1) {
         _reset_for_retry(p);
         return;
     }
     
     // send input
-    const char *cur = cmd;
-    const char *end = cmd + strlen(cmd);
+    const char *cur = line;
+    const char *end = line + strlen(line);
     while (cur != end) {
         ssize_t r = _write(p, cur, end - cur);
         // fprintf(stderr, "send %d %d\n", r, end-cur);
@@ -658,10 +679,22 @@ _get_text(dl_plugin_t self, unsigned int index, const char **output_ptr) {
     }
 }
 
-int
+void
+_select(dl_plugin_t self, int index) {
+    ep_priv_t p = (ep_priv_t)self->priv;
+    if (index >= 0 && index < p->filter_count)
+        _send_cmd(p, 's', "-1");
+    else {
+        char buf[16];           /* assume integer is -2^31 ~ (2^31 - 1) */
+        sprintf(buf, "%d", index);
+        _send_cmd(p, 's', buf);
+    }
+}
+
+void
 _open(dl_plugin_t self, int index, const char *input, int mode) {
     ep_priv_t p = (ep_priv_t)self->priv;
     if (index >= 0 && index < p->filter_count)
-        _send_cmd(p, p->recv_buf + p->text[p->filter[index]], mode);
-    else _send_cmd(p, input, mode);
+        _send_cmd(p, mode ? 'O' : 'o', p->recv_buf + p->text[p->filter[index]]);
+    else _send_cmd(p, mode ? 'O' : 'o', input);
 }

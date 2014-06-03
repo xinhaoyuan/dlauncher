@@ -68,22 +68,26 @@ static int  hist_plugin_query(dl_plugin_t self, const char *input);
 static int  hist_plugin_before_update(dl_plugin_t self);
 static int  hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_ptr);
 static int  hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_ptr);
-static int  hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode);
+static void hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode);
 
 static dl_plugin_s hist_plugin = {
     .priv          = NULL,
     .name          = "hist",
     .priority      = 100,
     .hist          = 0,
+    .input_privacy = DL_INPUT_PRIVACY_PUBLIC,
+    .input_mask    = DL_INPUT_EVENT_MASK_OPEN,
     .init          = &hist_plugin_init,
     .query         = &hist_plugin_query,
     .before_update = &hist_plugin_before_update,
     .update        = NULL,      /* never called */
     .get_desc      = &hist_plugin_get_desc,
     .get_text      = &hist_plugin_get_text,
+    .select        = NULL,
     .open          = &hist_plugin_open
 };
 
+static int private_filtered = 0;
 static const char *prompt_empty = "DLauncher-"VERSION;
 static char prompt_buf[BUFSIZ] = "";
 static char text[BUFSIZ] = "";
@@ -136,6 +140,8 @@ static dl_plugin_s plugin_summary = {
     .name          = "DLauncher-"VERSION,
     .priority      = 0,
     .hist          = 0,
+    .input_privacy = DL_INPUT_PRIVACY_PUBLIC,
+    .input_mask    = DL_INPUT_EVENT_MASK_OPEN,
     .init          = NULL,
     .query         = NULL,
     .before_update = NULL,
@@ -577,6 +583,19 @@ keypress(XKeyEvent *ev) {
         break;
     case XK_Escape:
         if (cur_plugin != &plugin_summary) {
+            if (private_filtered) {
+                char *f = strchr(text, ':');
+                if (f) {
+                    /* remove filter */
+                    char *s = text; ++ f;
+                    while (*f) {
+                        *s = *f;
+                        ++ s; ++ f;
+                    }
+                    *s = 0;
+                    cursor = s - text;
+                }
+            }
             cur_plugin = &plugin_summary;
             update(0);
         } else hide();
@@ -624,21 +643,26 @@ keypress(XKeyEvent *ev) {
         calc_offsets();
         break;
     case XK_Return:
-    case XK_KP_Enter:
+    case XK_KP_Enter: {
+        char *f, *input;
     open:
+        f = strchr(text, ':');
+        input = f ? f + 1 : text;
+        
         if (cur_plugin == &plugin_summary) {
             if (sel_index < 0) sel_index = 0;
             if (sel_index < cur_plugin->item_count) {
                 const char *_text;
                 cur_plugin->get_text(cur_plugin, sel_index, &_text);
-                strncpy(text, _text, sizeof text);
+                strncpy(input, _text, sizeof text - (input - text));
                 cursor = strlen(text);
                 cur_plugin = plugin_entry[psummary_index[sel_index]];
                 update(0);
                 goto open;
             }
             return;
-        } else if (cur_plugin) {
+        } else if (cur_plugin &&
+                   (cur_plugin->input_mask & DL_INPUT_EVENT_MASK_OPEN)) {
             if (sel_index >= 0 && sel_index < cur_plugin->item_count) {
                 const char *_text;
                 cur_plugin->get_text(cur_plugin, sel_index, &_text);
@@ -646,13 +670,13 @@ keypress(XKeyEvent *ev) {
                 cur_plugin->open(cur_plugin, sel_index, _text, !!(ev->state & ShiftMask));
             } else {
                 /* no selected item */
-                if (cur_plugin->hist) hist_add(cur_plugin->name, text);
-                cur_plugin->open(cur_plugin, -1, text, !!(ev->state & ShiftMask));
+                if (cur_plugin->hist) hist_add(cur_plugin->name, input);
+                cur_plugin->open(cur_plugin, -1, input, !!(ev->state & ShiftMask));
             }
         }
         hide();
         return;
-        
+    }
     case XK_Right:
         if(text[cursor] != '\0') {
             cursor = nextrune(+1);
@@ -693,17 +717,23 @@ complete_text(int to_update) {
         sel_index >= cur_plugin->item_count)
         sel_index = 0;
 
+    char *plugin_filter = strchr(text, ':');
+    char *input = text;
+    
+    if (plugin_filter)
+        input = plugin_filter + 1;
+
     const char *_text;
 
     if (to_update == 0) {
         int moved = 0;
         while (1) {
             cur_plugin->get_text(cur_plugin, sel_index, &_text);
-            if (!strcmp(text, _text) && !moved) {
+            if (!strcmp(input, _text) && !moved) {
                 item_sel_next();
                 moved = 1;
             } else {
-                strncpy(text, _text, sizeof text);
+                strncpy(input, _text, sizeof text - (input - text));
                 cursor = strlen(text);
                 break;
             }
@@ -712,13 +742,13 @@ complete_text(int to_update) {
     } else if (cur_plugin == &plugin_summary) {
         const char *_text;
         cur_plugin->get_text(cur_plugin, sel_index, &_text);
-        strncpy(text, _text, sizeof text);
+        strncpy(input, _text, sizeof text - (input - text));
         cursor = strlen(text);
         cur_plugin = plugin_entry[psummary_index[sel_index]];
         update(0);
     } else {
         cur_plugin->get_text(cur_plugin, sel_index, &_text);
-        strncpy(text, _text, sizeof text);
+        strncpy(input, _text, sizeof text - (input - text));
         cursor = strlen(text);
         update(1);
     }
@@ -735,21 +765,49 @@ psummary_comp(const void *a, const void *b) {
 void
 update(int query) {
     char *prompt_ptr = prompt_buf;
-    int   plugin_best = -1;
 
     prompt = prompt_empty;
     char *plugin_filter = strchr(text, ':');
     char *input = text;
+
+    int p;
+    int private_index = -2;
+    private_filtered = 0;
     if (plugin_filter) {
         input = plugin_filter + 1;
         *plugin_filter = 0;
+
+        for (p = 0; p < plugin_count; ++ p) {
+            if (strstr(plugin_entry[p]->name, text) == NULL) {
+                plugin_entry[p]->enabled = 0;
+                continue;
+            }
+            
+            plugin_entry[p]->enabled = 1;
+            if (private_index == -2) {
+                /* only one match */
+                private_index = p;
+            } else private_index = -1;
+        }
+
+        if (private_index >= 0) {
+            private_filtered = 1;
+            cur_plugin = plugin_entry[private_index];
+        }
+    } else {
+        for (p = 0; p < plugin_count; ++ p)
+            plugin_entry[p]->enabled = 1;
     }
 
-    int p;
     plugin_summary.item_count = 0;
     for (p = 0; p < plugin_count; ++ p) {
-        if (plugin_filter && strstr(plugin_entry[p]->name, text) == NULL) goto skip;
+        if (!plugin_entry[p]->enabled) goto skip;
         if (query) {
+            /* privacy check */
+            if (cur_plugin != plugin_entry[p] &&
+                plugin_entry[p]->input_privacy != DL_INPUT_PRIVACY_PUBLIC)
+                goto skip;
+            /* do query */
             if (plugin_entry[p]->query(plugin_entry[p], input)) goto skip;
         }
 
@@ -768,11 +826,6 @@ update(int query) {
         prompt_ptr += w - 1;
         pt_end[p] = prompt_ptr - prompt_buf;
 
-        if (plugin_best == -1 ||
-            plugin_entry[p]->priority > plugin_entry[plugin_best]->priority) {
-            plugin_best = p;
-        }
-
         plugin_entry[p]->enabled = 1;
         continue;
 
@@ -784,17 +837,17 @@ update(int query) {
 
     if (plugin_filter) *plugin_filter = ':';
 
-    if (!cur_plugin) {
-        cur_plugin = plugin_entry[plugin_best];
-    }
+    if (!cur_plugin)
+        cur_plugin = &plugin_summary;
 
     prompt = prompt_buf;
     
     if (cur_plugin == &plugin_summary) {
+
         qsort(psummary_index,
               plugin_summary.item_count, sizeof(int),
               psummary_comp);
-        
+
         cur_pindex = 0;
         sel_index = -1;
 
@@ -1007,20 +1060,20 @@ hist_plugin_get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-int
+void
 hist_plugin_open(dl_plugin_t self, int index, const char *input, int mode) {
     if (index < 0) index = 0;
     if (index >= self->item_count) {
         fprintf(stderr, "open out of bound\n");
-        return 1;
+        return;
     }
 
     hist_apply(hist_line_matched[index]);
-    if (cur_plugin != self) {
+    if (cur_plugin != self &&
+        (cur_plugin->input_mask & DL_INPUT_EVENT_MASK_OPEN)) {
         hist_add(cur_plugin->name, text);
         cur_plugin->open(cur_plugin, -1, text, mode);
     }
-    return 0;
 }
 
 fd_set in_fds, out_fds, stat_fds;

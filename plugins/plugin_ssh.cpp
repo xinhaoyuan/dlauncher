@@ -139,19 +139,17 @@ static int _get_text(dl_plugin_t self, unsigned int index, const char **output_p
     return 0;
 }
 
-static int _open(dl_plugin_t self, int index, const char *input, int mode) {
+static void _open(dl_plugin_t self, int index, const char *input, int mode) {
     priv_s *p = (priv_s *)self->priv;
     if (index >= 0 && index < p->candidates.size())
         input = p->candidates[index].c_str();
 
     vector<string> args;
-    // use urxvt here
     args.push_back(DEFAULT_TERM);
     args.push_back("-e");
     args.push_back("ssh");
     args.push_back(input);
     execute(args);
-    return 0;
 }
 
 static dl_plugin_s _self;
@@ -161,6 +159,8 @@ static __attribute__((constructor)) void _register(void) {
     _self.name       = "ssh";
     _self.priority   = 80;
     _self.hist       = 1;
+    _self.input_privacy = DL_INPUT_PRIVACY_PUBLIC;
+    _self.input_mask = DL_INPUT_EVENT_MASK_OPEN;
     _self.item_count = 0;
     _self.init       = &_init;
     _self.query      = &_query;
@@ -168,6 +168,7 @@ static __attribute__((constructor)) void _register(void) {
     _self.update     = NULL;
     _self.get_desc   = &_get_desc;
     _self.get_text   = &_get_text;
+    _self.select     = NULL;
     _self.open       = &_open;
     
     register_plugin(&_self);

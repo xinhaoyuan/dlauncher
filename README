@@ -22,6 +22,7 @@ FYI: zsh plugin may not work on FreeBSD due to a bug on ``zpty''
 
 # TODO
 
+ - documentation
  - more plugins
 
 Feel free to hack it.
