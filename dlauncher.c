@@ -111,6 +111,7 @@ static XIC xic;
 static unsigned int plugin_count = 0;
 static dl_plugin_t  plugin_entry[NPLUGIN];
 static int          plugin_update[NPLUGIN];
+static int          plugin_enabled[NPLUGIN];
 
 /* for modifying title */
 static int          pt_begin[NPLUGIN];
@@ -773,12 +774,12 @@ update(int query) {
             plugin_best = p;
         }
 
-        plugin_entry[p]->enabled = 1;
+        plugin_enabled[p] = 1;
         continue;
 
       skip:
         pt_begin[p] = pt_end[p] = -1;
-        plugin_entry[p]->enabled = 0;
+        plugin_enabled[p] = 0;
         if (cur_plugin == plugin_entry[p]) cur_plugin = NULL;
     }
 
@@ -1040,6 +1041,7 @@ register_update_fd(dl_plugin_t plugin, int fd, int event) {
 
         if (!fd_plugin || !fds || !fd_flags) {
             /* :( */
+            fprintf(stderr, "error when enlarge fd tables\n");
             exit(EXIT_FAILURE);
         }
 
@@ -1060,7 +1062,7 @@ register_update_fd(dl_plugin_t plugin, int fd, int event) {
     if (event & DL_FD_EVENT_STATUS)
         FD_SET(fd, &stat_fds);
 
-    return 0;
+    return id;
 }
 
 void
@@ -1237,9 +1239,9 @@ plugin_cycle_next(void) {
     if (plugin_count == 0) return;
     int id = (cur_plugin && cur_plugin->id >= 0) ? cur_plugin->id : (plugin_count - 1);
     int p = (id + 1) % plugin_count;
-    while (p != id && !plugin_entry[p]->enabled)
+    while (p != id && !plugin_enabled[p])
         p = (p + 1) % plugin_count;
-    if (plugin_entry[p]->enabled)
+    if (plugin_enabled[p])
         cur_plugin = plugin_entry[p];
     update(0);
 }
@@ -1250,9 +1252,9 @@ plugin_cycle_prev(void) {
     int id = (cur_plugin && cur_plugin->id >= 0) ? cur_plugin->id : 0;
     int step = plugin_count - 1;
     int p = (id + step) % plugin_count;
-    while (p != id && !plugin_entry[p]->enabled)
+    while (p != id && !plugin_enabled[p])
         p = (p + step) % plugin_count;
-    if (plugin_entry[p]->enabled)
+    if (plugin_enabled[p])
         cur_plugin = plugin_entry[p];
     update(0);
 }

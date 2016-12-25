@@ -1,5 +1,7 @@
 #include "plugin.h"
 
+#define _GNU_SOURCE
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -14,6 +16,8 @@
 #include <sys/un.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <time.h>
+#include "exec.h"
 
 #define PL_TYPE_EXEC 0
 #define PL_TYPE_SOCK 1
