@@ -85,4 +85,4 @@ There is no documents yet. One can refer to the ``plugin.c'' to figure
 out the protocol ;P
 
 Also, check out external/calc.zsh to see how a minimized external
-plugin are written.
+plugin is written.
