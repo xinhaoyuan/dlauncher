@@ -200,13 +200,13 @@ process_args(int argc, char *argv[]) {
             char *desc = strdup(argv[++ i]);
             /* format: name:entry[:opt] */
             char *name = desc;
-            
+
             char *entry = desc;
             while (*entry && *entry != ':') {
                 if (*entry == '\\' && entry[1] == ':') ++ entry;
                 ++ entry;
             }
-            
+
             if (*entry == ':') {
                 *entry = 0;
                 ++ entry;
@@ -225,7 +225,7 @@ process_args(int argc, char *argv[]) {
                 *opt = 0;
                 ++ opt;
             }
-            
+
             if (external_plugin_create(name, entry, opt) != 0) {
                 fprintf(stderr, "failed to create plugin\n");
                 exit(EXIT_FAILURE);
@@ -257,7 +257,7 @@ process_args(int argc, char *argv[]) {
                 while (*line_start && *line_start == ' ') ++ line_start;
                 if (*line_start == 0 || *line_start == '#' || *line_start == '\n') continue;
                 gl_ret -= line_start - line;
-                
+
                 ++ nargc;
                 if (line[gl_ret - 1] == '\n') -- gl_ret;
                 while (buf_size + gl_ret + 1 > buf_alloc) {
@@ -273,7 +273,7 @@ process_args(int argc, char *argv[]) {
                 buf_size += gl_ret + 1;
             }
             free(line);
-            
+
             fclose(f);
 
             char **nargv = (char **)malloc(sizeof(char *) * nargc);
@@ -281,7 +281,7 @@ process_args(int argc, char *argv[]) {
                 fprintf(stderr, "malloc failed\n");
                 exit(EXIT_FAILURE);
             }
-            
+
             line = buf;
             int j;
             for (j = 0; j < nargc; ++ j) {
@@ -289,7 +289,7 @@ process_args(int argc, char *argv[]) {
             }
 
             process_args(nargc, nargv);
-            
+
             free(nargv);
             free(buf);
         } else {
@@ -304,14 +304,14 @@ main(int argc, char *argv[]) {
     int i;
 
     process_args(argc - 1, argv + 1);
-    
+
     dc = initdc();
     initfont(dc, font ? font : DEFAULT_FONT);
     normcol = initcolor(dc, normfgcolor, normbgcolor);
     selcol = initcolor(dc, selfgcolor, selbgcolor);
 
     register_plugin(&hist_plugin);
-    
+
     setup();
 
     signal(SIGPIPE, SIG_IGN);
@@ -335,15 +335,15 @@ calc_offsets(void) {
         cur_pindex = prev_pindex = next_pindex = 0;
         return;
     }
-    
+
     int i, n;
 
     if(lines > 0)
         n = lines * bh;
     else
         n = mw - (promptw + inputw + textw(dc, "<") + textw(dc, ">"));
-    
-    /* calculate which items will begin the next page and previous page */    
+
+    /* calculate which items will begin the next page and previous page */
     for(i = 0, next_pindex = cur_pindex;
         next_pindex < cur_plugin->item_count;
         ++ next_pindex) {
@@ -412,7 +412,7 @@ drawmenu(void) {
 
     inputw = ru2p(MAX(mw / 10, textw(dc, text) + promptw)) - promptw;
     inputw = MIN(mw / 2, inputw);
-    
+
     /* draw input field */
     dc->w = (lines > 0 || !cur_plugin) ? mw - dc->x : inputw;
     drawtext(dc, text, normcol);
@@ -426,7 +426,7 @@ drawmenu(void) {
         for(index = cur_pindex; index != next_pindex; ++ index) {
             dc->y += dc->h;
             const char *_text;
-            cur_plugin->get_desc(cur_plugin, index, &_text);            
+            cur_plugin->get_desc(cur_plugin, index, &_text);
             drawtext(dc, _text,
                      (index == sel_index) ? selcol : normcol);
         }
@@ -438,7 +438,7 @@ drawmenu(void) {
             drawtext(dc, "<", normcol);
         for(index = cur_pindex; index != next_pindex; ++ index) {
             const char *_text;
-            cur_plugin->get_desc(cur_plugin, index, &_text);            
+            cur_plugin->get_desc(cur_plugin, index, &_text);
 
             int tw = textw(dc, _text);
             dc->x += dc->w;
@@ -508,7 +508,7 @@ keypress(XKeyEvent *ev) {
         case XK_g: /* cancel selection */
             sel_index = -1;
             break;
-            
+
         case XK_k: /* delete right */
             text[cursor] = '\0';
             break;
@@ -582,7 +582,7 @@ keypress(XKeyEvent *ev) {
             update(0);
         } else hide();
         return;
-        
+
     case XK_Home:
         if (!cur_plugin || sel_index < 0 || sel_index == 0) {
             cursor = 0;
@@ -653,7 +653,7 @@ keypress(XKeyEvent *ev) {
         }
         hide();
         return;
-        
+
     case XK_Right:
         if(text[cursor] != '\0') {
             cursor = nextrune(+1);
@@ -762,7 +762,7 @@ update(int query) {
             psummary_index[plugin_summary.item_count] = p;
             ++ plugin_summary.item_count;
         }
-        
+
         pt_begin[p] = prompt_ptr - prompt_buf;
         int w = snprintf(prompt_ptr, sizeof(prompt_buf) - (prompt_ptr - prompt_buf),
                          " %s ", plugin_entry[p]->name);
@@ -790,17 +790,17 @@ update(int query) {
     }
 
     prompt = prompt_buf;
-    
+
     if (cur_plugin == &plugin_summary) {
         qsort(psummary_index,
               plugin_summary.item_count, sizeof(int),
               psummary_comp);
-        
+
         cur_pindex = 0;
         sel_index = -1;
 
         calc_offsets();
-        
+
     } else if (cur_plugin && cur_plugin->id >= 0) {
         prompt_buf[pt_begin[cur_plugin->id]] = '[';
         prompt_buf[pt_end[cur_plugin->id]] = ']';
@@ -843,7 +843,7 @@ hist_plugin_init(dl_plugin_t self) {
     hist_index = -1;
     hist_count = 0;
     hist_file = NULL;
-    
+
     const char *home_dir = getenv("HOME");
     if (home_dir == NULL) goto skip_history;
 
@@ -852,7 +852,7 @@ hist_plugin_init(dl_plugin_t self) {
     if (hist_file_path == NULL) goto skip_history;
     FILE *his_r = fopen(hist_file_path, "r");
     if (his_r == NULL) goto skip_history;
-    
+
     char *line = NULL; size_t line_size; ssize_t gl_ret;
     while ((gl_ret = getline(&line, &line_size, his_r)) >= 0) {
         if (gl_ret > 0 && line[gl_ret - 1] == '\n')
@@ -864,7 +864,7 @@ hist_plugin_init(dl_plugin_t self) {
     if (line) free(line);
 
     fclose(his_r);
-    
+
   skip_history:
     hist_file = fopen(hist_file_path, "a");
 }
@@ -896,7 +896,7 @@ hist_add_line(const char *line) {
             return;
         }
     }
-    
+
     if (hist_count >= HIST_SIZE * 2) {
         int i;
         for (i = 0; i < HIST_SIZE; ++ i) {
@@ -990,7 +990,7 @@ hist_plugin_get_desc(dl_plugin_t self, unsigned int index, const char **output_p
         fprintf(stderr, "get_text out of bound\n");
         return 1;
     }
-    
+
     *output_ptr = hist_line_matched[index];
     return 0;
 }
@@ -1049,7 +1049,7 @@ register_update_fd(dl_plugin_t plugin, int fd, int event) {
     }
 
     int id = fd_size ++;
-        
+
     fd_plugin[id] = plugin->id;
     fds[id] = fd;
     fd_flags[id] = event;
@@ -1124,7 +1124,7 @@ run(void) {
         }
 
         select(max_fd + 1, &in_fds, &out_fds, &stat_fds, &tv);
-        
+
         for (i = 0; i < fd_size; ++ i) {
             if ((fd_flags[i] & DL_FD_EVENT_READ) &&
                 FD_ISSET(fds[i], &in_fds))
@@ -1148,7 +1148,7 @@ run(void) {
         if (showed && to_update) {
             update(0);
         }
-            
+
     }
 }
 
@@ -1156,7 +1156,7 @@ void
 calc_geo(void) {
     int x, y, screen = DefaultScreen(dc->dpy);
     Window root = RootWindow(dc->dpy, screen);
-    
+
 #ifdef XINERAMA
     int n;
     XineramaScreenInfo *info;
@@ -1216,9 +1216,9 @@ setup(void) {
     bh = dc->font.height + 2;
     lines = MAX(lines, 0);
     mh = (lines + 1) * bh;
-    
+
     calc_geo();
-    
+
     /* create menu window */
     swa.override_redirect = True;
     swa.background_pixel = normcol->BG;
